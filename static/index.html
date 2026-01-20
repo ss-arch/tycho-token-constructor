@@ -3,160 +3,387 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tycho Token Constructor</title>
+    <title>Tycho Token Constructor | Create TIP-3 Tokens</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🚀 Tycho Token Constructor</h1>
-            <p class="subtitle">Deploy TIP-3 Tokens on Tycho Testnet</p>
-        </header>
-
-        <!-- Wallet Info -->
-        <section class="card wallet-card">
-            <h2>Server Wallet</h2>
-            <div class="wallet-info">
-                <div class="info-row">
-                    <span class="label">Address:</span>
-                    <span id="wallet-address" class="value mono">Loading...</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Balance:</span>
-                    <span id="wallet-balance" class="value">Loading...</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Network:</span>
-                    <span id="network-name" class="value">Loading...</span>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">◆</span>
+                <span class="logo-text">Tycho Token Constructor</span>
+            </div>
+            <div class="wallet-status" id="wallet-status">
+                <div class="status-dot online"></div>
+                <div class="wallet-info-compact">
+                    <span class="network-badge">Tycho Testnet</span>
+                    <span class="balance-display" id="header-balance">1000.00 TYCHO</span>
                 </div>
             </div>
-            <button class="btn btn-secondary" onclick="refreshWallet()">Refresh</button>
-        </section>
-
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" data-tab="deploy">Deploy Token</button>
-            <button class="tab" data-tab="info">Token Info</button>
-            <button class="tab" data-tab="mint">Mint Tokens</button>
         </div>
+    </header>
 
-        <!-- Deploy Token Tab -->
-        <section id="deploy-tab" class="card tab-content active">
-            <h2>Deploy New Token</h2>
-            <form id="deploy-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="token-name">Token Name *</label>
-                        <input type="text" id="token-name" placeholder="My Token" required maxlength="64">
+    <main class="main-container">
+        <!-- Navigation Tabs -->
+        <nav class="main-tabs">
+            <button class="main-tab active" data-tab="create">
+                <span class="tab-icon">+</span>
+                Create Token
+            </button>
+            <button class="main-tab" data-tab="info">
+                <span class="tab-icon">◎</span>
+                Token Info
+            </button>
+            <button class="main-tab" data-tab="mint">
+                <span class="tab-icon">✦</span>
+                Mint Tokens
+            </button>
+        </nav>
+
+        <!-- Create Token Section -->
+        <section id="create-tab" class="tab-section active">
+            <div class="create-layout">
+                <!-- Left: Form -->
+                <div class="form-panel">
+                    <div class="panel-header">
+                        <h1>Create New Token</h1>
+                        <p class="subtitle">Deploy a TIP-3 fungible token on Tycho Testnet</p>
                     </div>
-                    <div class="form-group">
-                        <label for="token-symbol">Symbol *</label>
-                        <input type="text" id="token-symbol" placeholder="MTK" required maxlength="16">
-                    </div>
+
+                    <form id="deploy-form" class="token-form">
+                        <!-- Token Info Section -->
+                        <div class="form-section">
+                            <h3 class="section-title">Token Information</h3>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="token-name">
+                                        Token Name
+                                        <span class="required">*</span>
+                                    </label>
+                                    <input type="text" id="token-name" placeholder="e.g., My Awesome Token" required maxlength="64">
+                                    <div class="input-footer">
+                                        <span class="hint">The full name of your token</span>
+                                        <span class="char-count"><span id="name-count">0</span>/64</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="token-symbol">
+                                        Symbol
+                                        <span class="required">*</span>
+                                    </label>
+                                    <input type="text" id="token-symbol" placeholder="e.g., MAT" required maxlength="16" class="uppercase-input">
+                                    <div class="input-footer">
+                                        <span class="hint">Short ticker (e.g., BTC, ETH)</span>
+                                        <span class="char-count"><span id="symbol-count">0</span>/16</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="token-decimals">Decimals</label>
+                                <div class="decimals-buttons">
+                                    <button type="button" class="decimal-btn" data-value="0">0</button>
+                                    <button type="button" class="decimal-btn" data-value="6">6</button>
+                                    <button type="button" class="decimal-btn active" data-value="9">9</button>
+                                    <button type="button" class="decimal-btn" data-value="18">18</button>
+                                    <input type="number" id="token-decimals" class="decimal-input" value="9" min="0" max="18">
+                                </div>
+                                <span class="hint">Number of decimal places. 9 is standard for TVM chains.</span>
+                            </div>
+                        </div>
+
+                        <!-- Supply Section -->
+                        <div class="form-section">
+                            <h3 class="section-title">Token Supply</h3>
+
+                            <div class="form-group">
+                                <label for="initial-supply">Initial Supply</label>
+                                <div class="supply-wrapper">
+                                    <input type="text" id="initial-supply" placeholder="1,000,000" value="1000000">
+                                    <span class="supply-symbol" id="supply-symbol-display">tokens</span>
+                                </div>
+                                <div class="supply-presets">
+                                    <button type="button" class="preset-btn" data-value="1000000">1M</button>
+                                    <button type="button" class="preset-btn" data-value="10000000">10M</button>
+                                    <button type="button" class="preset-btn" data-value="100000000">100M</button>
+                                    <button type="button" class="preset-btn" data-value="1000000000">1B</button>
+                                </div>
+                                <div class="supply-conversion">
+                                    Raw value: <code id="raw-supply-display">1,000,000,000,000,000</code>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="initial-supply-to">Supply Recipient <span class="optional">(optional)</span></label>
+                                <input type="text" id="initial-supply-to" placeholder="0:... (defaults to deployer wallet)">
+                                <span class="hint">Leave empty to receive tokens in the server wallet</span>
+                            </div>
+                        </div>
+
+                        <!-- Features Section -->
+                        <div class="form-section">
+                            <h3 class="section-title">Token Features</h3>
+
+                            <div class="features-list">
+                                <label class="feature-toggle">
+                                    <div class="feature-info">
+                                        <span class="feature-icon mint-icon">✦</span>
+                                        <div class="feature-text">
+                                            <span class="feature-name">Mintable</span>
+                                            <span class="feature-desc">Allow creating new tokens after deployment</span>
+                                        </div>
+                                    </div>
+                                    <div class="toggle-switch">
+                                        <input type="checkbox" id="mintable" checked>
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+
+                                <label class="feature-toggle">
+                                    <div class="feature-info">
+                                        <span class="feature-icon burn-icon">🔥</span>
+                                        <div class="feature-text">
+                                            <span class="feature-name">Burnable by Root</span>
+                                            <span class="feature-desc">Allow root owner to burn tokens</span>
+                                        </div>
+                                    </div>
+                                    <div class="toggle-switch">
+                                        <input type="checkbox" id="burnable" checked>
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+
+                                <label class="feature-toggle">
+                                    <div class="feature-info">
+                                        <span class="feature-icon pause-icon">⏸</span>
+                                        <div class="feature-text">
+                                            <span class="feature-name">Burn Paused</span>
+                                            <span class="feature-desc">Start with burning paused</span>
+                                        </div>
+                                    </div>
+                                    <div class="toggle-switch">
+                                        <input type="checkbox" id="burn-paused">
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Deploy Button -->
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-large" id="deploy-btn">
+                                <span class="btn-icon">◆</span>
+                                <span class="btn-text">Deploy Token</span>
+                                <span class="btn-loading">
+                                    <span class="spinner"></span>
+                                    Deploying...
+                                </span>
+                            </button>
+                            <p class="deploy-hint">Estimated fee: ~0.5 TYCHO</p>
+                        </div>
+                    </form>
+
+                    <!-- Deploy Result -->
+                    <div id="deploy-result" class="result-card" style="display: none;"></div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="token-decimals">Decimals</label>
-                        <input type="number" id="token-decimals" value="9" min="0" max="18">
+                <!-- Right: Live Preview -->
+                <div class="preview-panel">
+                    <div class="preview-sticky">
+                        <div class="preview-header">
+                            <h2>Live Preview</h2>
+                            <span class="preview-badge">TIP-3</span>
+                        </div>
+
+                        <div class="token-preview-card">
+                            <div class="token-header">
+                                <div class="token-avatar" id="token-avatar">
+                                    <span id="avatar-letter">T</span>
+                                </div>
+                                <div class="token-identity">
+                                    <h3 class="token-name" id="preview-name">Token Name</h3>
+                                    <span class="token-symbol" id="preview-symbol">SYMBOL</span>
+                                </div>
+                            </div>
+
+                            <div class="token-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Total Supply</span>
+                                    <span class="detail-value" id="preview-supply">1,000,000</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Decimals</span>
+                                    <span class="detail-value" id="preview-decimals">9</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Network</span>
+                                    <span class="detail-value network-val">
+                                        <span class="dot"></span>
+                                        Tycho Testnet
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="token-features-preview" id="preview-features">
+                                <span class="feature-badge active" data-feature="mint">Mintable</span>
+                                <span class="feature-badge active" data-feature="burn">Burnable</span>
+                            </div>
+                        </div>
+
+                        <div class="preview-checklist">
+                            <h4>Your token will have:</h4>
+                            <ul class="checklist">
+                                <li class="check-item">
+                                    <span class="check-icon">✓</span>
+                                    TIP-3 compliant smart contract
+                                </li>
+                                <li class="check-item">
+                                    <span class="check-icon">✓</span>
+                                    Full ownership of token root
+                                </li>
+                                <li class="check-item" id="check-mintable">
+                                    <span class="check-icon">✓</span>
+                                    Ability to mint new tokens
+                                </li>
+                                <li class="check-item">
+                                    <span class="check-icon">✓</span>
+                                    Compatible with Tycho ecosystem
+                                </li>
+                            </ul>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="initial-supply">Initial Supply</label>
-                        <input type="number" id="initial-supply" value="0" min="0" placeholder="0">
-                        <span class="hint">In smallest units (e.g., 1000000000 = 1 token with 9 decimals)</span>
-                    </div>
                 </div>
-
-                <div class="form-group">
-                    <label for="initial-supply-to">Initial Supply Recipient (optional)</label>
-                    <input type="text" id="initial-supply-to" placeholder="0:... (defaults to server wallet)">
-                </div>
-
-                <div class="form-row checkboxes">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="mint-disabled">
-                        <span>Disable Minting</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="burn-disabled">
-                        <span>Disable Burn by Root</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="burn-paused">
-                        <span>Pause Burning</span>
-                    </label>
-                </div>
-
-                <button type="submit" class="btn btn-primary" id="deploy-btn">
-                    <span class="btn-text">Deploy Token</span>
-                    <span class="btn-loading" style="display:none;">Deploying...</span>
-                </button>
-            </form>
-
-            <div id="deploy-result" class="result" style="display:none;"></div>
+            </div>
         </section>
 
-        <!-- Token Info Tab -->
-        <section id="info-tab" class="card tab-content">
-            <h2>Get Token Information</h2>
-            <form id="info-form">
-                <div class="form-group">
-                    <label for="info-address">Token Address *</label>
-                    <input type="text" id="info-address" placeholder="0:..." required>
+        <!-- Token Info Section -->
+        <section id="info-tab" class="tab-section">
+            <div class="single-panel">
+                <div class="panel-header">
+                    <h1>Token Information</h1>
+                    <p class="subtitle">Look up any TIP-3 token on Tycho Testnet</p>
                 </div>
-                <button type="submit" class="btn btn-primary" id="info-btn">
-                    <span class="btn-text">Get Info</span>
-                    <span class="btn-loading" style="display:none;">Loading...</span>
-                </button>
-            </form>
 
-            <div id="info-result" class="result" style="display:none;"></div>
+                <form id="info-form" class="search-form">
+                    <div class="search-input-wrapper">
+                        <input type="text" id="info-address" placeholder="Enter token address (0:...)" required>
+                        <button type="submit" class="btn btn-primary" id="info-btn">
+                            <span class="btn-text">Search</span>
+                            <span class="btn-loading">
+                                <span class="spinner"></span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+
+                <div id="info-result" class="info-result-card" style="display: none;"></div>
+            </div>
         </section>
 
-        <!-- Mint Tokens Tab -->
-        <section id="mint-tab" class="card tab-content">
-            <h2>Mint Tokens</h2>
-            <form id="mint-form">
-                <div class="form-group">
-                    <label for="mint-token-address">Token Address *</label>
-                    <input type="text" id="mint-token-address" placeholder="0:..." required>
+        <!-- Mint Tokens Section -->
+        <section id="mint-tab" class="tab-section">
+            <div class="single-panel">
+                <div class="panel-header">
+                    <h1>Mint Tokens</h1>
+                    <p class="subtitle">Create additional tokens for an existing token contract</p>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="mint-amount">Amount *</label>
-                        <input type="number" id="mint-amount" placeholder="1000000000" required min="1">
-                        <span class="hint">In smallest units</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="mint-recipient">Recipient Address *</label>
-                        <input type="text" id="mint-recipient" placeholder="0:..." required>
-                    </div>
-                </div>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="mint-notify">
-                    <span>Notify Recipient</span>
-                </label>
-                <button type="submit" class="btn btn-primary" id="mint-btn">
-                    <span class="btn-text">Mint Tokens</span>
-                    <span class="btn-loading" style="display:none;">Minting...</span>
-                </button>
-            </form>
 
-            <div id="mint-result" class="result" style="display:none;"></div>
+                <form id="mint-form" class="token-form">
+                    <div class="form-section">
+                        <div class="form-group">
+                            <label for="mint-token-address">
+                                Token Address
+                                <span class="required">*</span>
+                            </label>
+                            <input type="text" id="mint-token-address" placeholder="0:..." required>
+                            <span class="hint">The TIP-3 token root contract address</span>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="mint-amount">
+                                    Amount
+                                    <span class="required">*</span>
+                                </label>
+                                <input type="text" id="mint-amount" placeholder="1,000,000" required>
+                                <span class="hint">Amount in smallest units</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="mint-recipient">
+                                    Recipient
+                                    <span class="required">*</span>
+                                </label>
+                                <input type="text" id="mint-recipient" placeholder="0:..." required>
+                                <span class="hint">Address to receive minted tokens</span>
+                            </div>
+                        </div>
+
+                        <label class="feature-toggle compact">
+                            <div class="feature-info">
+                                <div class="feature-text">
+                                    <span class="feature-name">Notify Recipient</span>
+                                    <span class="feature-desc">Send notification about incoming tokens</span>
+                                </div>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="mint-notify">
+                                <span class="slider"></span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary btn-large" id="mint-btn">
+                            <span class="btn-icon">✦</span>
+                            <span class="btn-text">Mint Tokens</span>
+                            <span class="btn-loading">
+                                <span class="spinner"></span>
+                                Minting...
+                            </span>
+                        </button>
+                    </div>
+                </form>
+
+                <div id="mint-result" class="result-card" style="display: none;"></div>
+            </div>
         </section>
 
         <!-- Recent Deployments -->
-        <section class="card">
-            <h2>Recent Deployments</h2>
-            <div id="recent-deployments">
-                <p class="empty-state">No tokens deployed yet in this session.</p>
+        <section class="recent-section">
+            <div class="recent-header">
+                <h2>Recent Deployments</h2>
+                <span class="recent-count" id="recent-count">0</span>
+            </div>
+            <div id="recent-deployments" class="deployments-list">
+                <div class="empty-state">
+                    <span class="empty-icon">◇</span>
+                    <p>No tokens deployed yet in this session</p>
+                </div>
             </div>
         </section>
+    </main>
 
-        <footer>
-            <p>Tycho Token Constructor v1.0.0 | <a href="/docs" target="_blank">API Docs</a></p>
-        </footer>
-    </div>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-left">
+                <span class="footer-brand">◆ Tycho Token Constructor</span>
+                <span class="footer-version">v1.0.0</span>
+            </div>
+            <div class="footer-links">
+                <a href="/docs" target="_blank">API Docs</a>
+                <a href="/redoc" target="_blank">ReDoc</a>
+                <a href="https://github.com/ss-arch/tycho-token-constructor" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </footer>
 
     <script src="/static/js/app.js"></script>
 </body>

@@ -7,19 +7,20 @@ const recentDeployments = [];
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initForms();
+    initLivePreview();
+    initDecimalButtons();
+    initSupplyPresets();
     refreshWallet();
 });
 
 // Tab functionality
 function initTabs() {
-    const tabs = document.querySelectorAll('.tab');
+    const tabs = document.querySelectorAll('.main-tab');
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Remove active class from all tabs
             tabs.forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
 
-            // Add active class to clicked tab
             tab.classList.add('active');
             const tabId = tab.dataset.tab;
             document.getElementById(`${tabId}-tab`).classList.add('active');
@@ -29,14 +30,121 @@ function initTabs() {
 
 // Form handlers
 function initForms() {
-    // Deploy form
     document.getElementById('deploy-form').addEventListener('submit', handleDeploy);
-
-    // Info form
     document.getElementById('info-form').addEventListener('submit', handleGetInfo);
-
-    // Mint form
     document.getElementById('mint-form').addEventListener('submit', handleMint);
+}
+
+// Live preview functionality
+function initLivePreview() {
+    const nameInput = document.getElementById('token-name');
+    const symbolInput = document.getElementById('token-symbol');
+    const decimalsInput = document.getElementById('token-decimals');
+    const supplyInput = document.getElementById('initial-supply');
+    const mintableCheck = document.getElementById('mintable');
+    const burnableCheck = document.getElementById('burnable');
+
+    // Name updates
+    nameInput.addEventListener('input', () => {
+        const name = nameInput.value || 'Token Name';
+        document.getElementById('preview-name').textContent = name;
+        document.getElementById('avatar-letter').textContent = name.charAt(0).toUpperCase() || 'T';
+        document.getElementById('name-count').textContent = nameInput.value.length;
+    });
+
+    // Symbol updates
+    symbolInput.addEventListener('input', () => {
+        const symbol = symbolInput.value.toUpperCase() || 'SYMBOL';
+        document.getElementById('preview-symbol').textContent = symbol;
+        document.getElementById('supply-symbol-display').textContent = symbol || 'tokens';
+        document.getElementById('symbol-count').textContent = symbolInput.value.length;
+    });
+
+    // Decimals updates
+    decimalsInput.addEventListener('input', () => {
+        document.getElementById('preview-decimals').textContent = decimalsInput.value;
+        updateRawSupply();
+    });
+
+    // Supply updates
+    supplyInput.addEventListener('input', () => {
+        updateSupplyPreview();
+        updateRawSupply();
+    });
+
+    // Feature toggles
+    mintableCheck.addEventListener('change', updateFeaturePreview);
+    burnableCheck.addEventListener('change', updateFeaturePreview);
+}
+
+function updateSupplyPreview() {
+    const supply = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
+    const formatted = parseInt(supply).toLocaleString();
+    document.getElementById('preview-supply').textContent = formatted;
+}
+
+function updateRawSupply() {
+    const supply = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
+    const decimals = parseInt(document.getElementById('token-decimals').value) || 9;
+    const raw = BigInt(supply) * BigInt(10 ** decimals);
+    document.getElementById('raw-supply-display').textContent = raw.toLocaleString();
+}
+
+function updateFeaturePreview() {
+    const mintable = document.getElementById('mintable').checked;
+    const burnable = document.getElementById('burnable').checked;
+
+    const mintBadge = document.querySelector('.feature-badge[data-feature="mint"]');
+    const burnBadge = document.querySelector('.feature-badge[data-feature="burn"]');
+
+    if (mintBadge) {
+        mintBadge.classList.toggle('active', mintable);
+    }
+    if (burnBadge) {
+        burnBadge.classList.toggle('active', burnable);
+    }
+
+    // Update checklist
+    const checkMintable = document.getElementById('check-mintable');
+    if (checkMintable) {
+        checkMintable.style.opacity = mintable ? '1' : '0.4';
+    }
+}
+
+// Decimal buttons
+function initDecimalButtons() {
+    const buttons = document.querySelectorAll('.decimal-btn');
+    const input = document.getElementById('token-decimals');
+
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            buttons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            input.value = btn.dataset.value;
+            document.getElementById('preview-decimals').textContent = btn.dataset.value;
+            updateRawSupply();
+        });
+    });
+
+    input.addEventListener('input', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        const matchingBtn = Array.from(buttons).find(b => b.dataset.value === input.value);
+        if (matchingBtn) matchingBtn.classList.add('active');
+    });
+}
+
+// Supply presets
+function initSupplyPresets() {
+    const presets = document.querySelectorAll('.preset-btn');
+    const input = document.getElementById('initial-supply');
+
+    presets.forEach(btn => {
+        btn.addEventListener('click', () => {
+            input.value = parseInt(btn.dataset.value).toLocaleString();
+            updateSupplyPreview();
+            updateRawSupply();
+        });
+    });
 }
 
 // Refresh wallet info
@@ -45,14 +153,9 @@ async function refreshWallet() {
         const response = await fetch(`${API_BASE}/wallet`);
         const data = await response.json();
 
-        document.getElementById('wallet-address').textContent = truncateAddress(data.address);
-        document.getElementById('wallet-address').title = data.address;
-        document.getElementById('wallet-balance').textContent = `${data.balance.toFixed(4)} tokens`;
-        document.getElementById('network-name').textContent = data.network;
+        document.getElementById('header-balance').textContent = `${data.balance.toFixed(2)} TYCHO`;
     } catch (error) {
-        document.getElementById('wallet-address').textContent = 'Error loading';
-        document.getElementById('wallet-balance').textContent = 'Error loading';
-        document.getElementById('network-name').textContent = 'Error loading';
+        document.getElementById('header-balance').textContent = 'Error';
         console.error('Failed to load wallet info:', error);
     }
 }
@@ -67,13 +170,17 @@ async function handleDeploy(e) {
     setButtonLoading(btn, true);
     resultDiv.style.display = 'none';
 
+    const supplyRaw = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
+    const decimals = parseInt(document.getElementById('token-decimals').value) || 9;
+    const rawSupply = BigInt(supplyRaw) * BigInt(10 ** decimals);
+
     const payload = {
         name: document.getElementById('token-name').value,
-        symbol: document.getElementById('token-symbol').value,
-        decimals: parseInt(document.getElementById('token-decimals').value) || 9,
-        initial_supply: parseInt(document.getElementById('initial-supply').value) || 0,
-        mint_disabled: document.getElementById('mint-disabled').checked,
-        burn_by_root_disabled: document.getElementById('burn-disabled').checked,
+        symbol: document.getElementById('token-symbol').value.toUpperCase(),
+        decimals: decimals,
+        initial_supply: Number(rawSupply),
+        mint_disabled: !document.getElementById('mintable').checked,
+        burn_by_root_disabled: !document.getElementById('burnable').checked,
         burn_paused: document.getElementById('burn-paused').checked
     };
 
@@ -95,9 +202,7 @@ async function handleDeploy(e) {
             showDeployResult(resultDiv, data, true);
             addRecentDeployment(data);
             refreshWallet();
-            // Clear form
-            document.getElementById('deploy-form').reset();
-            document.getElementById('token-decimals').value = 9;
+            resetForm();
         } else {
             showDeployResult(resultDiv, { error: data.detail || 'Deployment failed' }, false);
         }
@@ -106,6 +211,32 @@ async function handleDeploy(e) {
     } finally {
         setButtonLoading(btn, false);
     }
+}
+
+function resetForm() {
+    document.getElementById('deploy-form').reset();
+    document.getElementById('token-decimals').value = 9;
+    document.getElementById('initial-supply').value = '1000000';
+
+    // Reset preview
+    document.getElementById('preview-name').textContent = 'Token Name';
+    document.getElementById('preview-symbol').textContent = 'SYMBOL';
+    document.getElementById('preview-supply').textContent = '1,000,000';
+    document.getElementById('preview-decimals').textContent = '9';
+    document.getElementById('avatar-letter').textContent = 'T';
+    document.getElementById('name-count').textContent = '0';
+    document.getElementById('symbol-count').textContent = '0';
+
+    // Reset decimal buttons
+    document.querySelectorAll('.decimal-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.decimal-btn[data-value="9"]').classList.add('active');
+
+    // Reset features
+    document.getElementById('mintable').checked = true;
+    document.getElementById('burnable').checked = true;
+    document.getElementById('burn-paused').checked = false;
+    updateFeaturePreview();
+    updateRawSupply();
 }
 
 // Get token info handler
@@ -145,9 +276,11 @@ async function handleMint(e) {
     setButtonLoading(btn, true);
     resultDiv.style.display = 'none';
 
+    const amount = document.getElementById('mint-amount').value.replace(/,/g, '');
+
     const payload = {
         token_address: document.getElementById('mint-token-address').value.trim(),
-        amount: parseInt(document.getElementById('mint-amount').value),
+        amount: parseInt(amount),
         recipient: document.getElementById('mint-recipient').value.trim(),
         notify: document.getElementById('mint-notify').checked
     };
@@ -177,127 +310,115 @@ async function handleMint(e) {
 // Display functions
 function showDeployResult(div, data, success) {
     div.style.display = 'block';
-    div.className = `result ${success ? 'success' : 'error'}`;
+    div.className = `result-card ${success ? 'success' : 'error'}`;
 
     if (success) {
         div.innerHTML = `
             <h3>✓ Token Deployed Successfully</h3>
             <div class="result-details">
-                <div class="detail-row">
-                    <span class="detail-label">Address</span>
-                    <span class="detail-value mono">${truncateAddress(data.address)}</span>
+                <div class="result-row">
+                    <span class="result-label">Contract Address</span>
+                    <span class="result-value">${truncateAddress(data.address)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Name</span>
-                    <span class="detail-value">${data.name}</span>
+                <div class="result-row">
+                    <span class="result-label">Token</span>
+                    <span class="result-value">${data.name} (${data.symbol})</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Symbol</span>
-                    <span class="detail-value">${data.symbol}</span>
+                <div class="result-row">
+                    <span class="result-label">Initial Supply</span>
+                    <span class="result-value">${formatSupply(data.initial_supply, data.decimals)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Decimals</span>
-                    <span class="detail-value">${data.decimals}</span>
+                <div class="result-row">
+                    <span class="result-label">Transaction</span>
+                    <span class="result-value">${truncateAddress(data.transaction_id)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Initial Supply</span>
-                    <span class="detail-value">${formatSupply(data.initial_supply, data.decimals)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Transaction</span>
-                    <span class="detail-value mono">${truncateAddress(data.transaction_id)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Explorer</span>
-                    <span class="detail-value"><a href="${data.explorer_url}" target="_blank">View on Explorer →</a></span>
+                <div class="result-row">
+                    <span class="result-label">Explorer</span>
+                    <span class="result-value"><a href="${data.explorer_url}" target="_blank">View on Explorer →</a></span>
                 </div>
             </div>
         `;
     } else {
         div.innerHTML = `
             <h3>✗ Deployment Failed</h3>
-            <p>${data.error}</p>
+            <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
         `;
     }
 }
 
 function showInfoResult(div, data, success) {
     div.style.display = 'block';
-    div.className = `result ${success ? 'success' : 'error'}`;
+    div.className = `info-result-card ${success ? '' : 'error'}`;
 
     if (success) {
         div.innerHTML = `
-            <h3>✓ Token Information</h3>
+            <div class="token-header" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                <div class="token-avatar">
+                    <span>${data.name.charAt(0).toUpperCase()}</span>
+                </div>
+                <div class="token-identity">
+                    <h3 class="token-name">${data.name}</h3>
+                    <span class="token-symbol">${data.symbol}</span>
+                </div>
+            </div>
             <div class="result-details">
-                <div class="detail-row">
-                    <span class="detail-label">Address</span>
-                    <span class="detail-value mono">${truncateAddress(data.address)}</span>
+                <div class="result-row">
+                    <span class="result-label">Address</span>
+                    <span class="result-value">${truncateAddress(data.address)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Name</span>
-                    <span class="detail-value">${data.name}</span>
+                <div class="result-row">
+                    <span class="result-label">Total Supply</span>
+                    <span class="result-value">${formatSupply(data.total_supply, data.decimals)} ${data.symbol}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Symbol</span>
-                    <span class="detail-value">${data.symbol}</span>
+                <div class="result-row">
+                    <span class="result-label">Decimals</span>
+                    <span class="result-value">${data.decimals}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Decimals</span>
-                    <span class="detail-value">${data.decimals}</span>
+                <div class="result-row">
+                    <span class="result-label">Root Owner</span>
+                    <span class="result-value">${truncateAddress(data.root_owner)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Total Supply</span>
-                    <span class="detail-value">${formatSupply(data.total_supply, data.decimals)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Root Owner</span>
-                    <span class="detail-value mono">${truncateAddress(data.root_owner)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Contract Balance</span>
-                    <span class="detail-value">${formatBalance(data.balance)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Explorer</span>
-                    <span class="detail-value"><a href="${data.explorer_url}" target="_blank">View on Explorer →</a></span>
+                <div class="result-row">
+                    <span class="result-label">Explorer</span>
+                    <span class="result-value"><a href="${data.explorer_url}" target="_blank">View on Explorer →</a></span>
                 </div>
             </div>
         `;
     } else {
         div.innerHTML = `
-            <h3>✗ Error</h3>
-            <p>${data.error}</p>
+            <h3 style="color: var(--error);">✗ Error</h3>
+            <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
         `;
     }
 }
 
 function showMintResult(div, data, success) {
     div.style.display = 'block';
-    div.className = `result ${success ? 'success' : 'error'}`;
+    div.className = `result-card ${success ? 'success' : 'error'}`;
 
     if (success) {
         div.innerHTML = `
             <h3>✓ Tokens Minted Successfully</h3>
             <div class="result-details">
-                <div class="detail-row">
-                    <span class="detail-label">Transaction</span>
-                    <span class="detail-value mono">${truncateAddress(data.transaction_id)}</span>
+                <div class="result-row">
+                    <span class="result-label">Transaction</span>
+                    <span class="result-value">${truncateAddress(data.transaction_id)}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Message</span>
-                    <span class="detail-value">${data.message}</span>
+                <div class="result-row">
+                    <span class="result-label">Status</span>
+                    <span class="result-value">${data.message}</span>
                 </div>
             </div>
         `;
     } else {
         div.innerHTML = `
             <h3>✗ Mint Failed</h3>
-            <p>${data.error}</p>
+            <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
         `;
     }
 }
 
-// Add to recent deployments
+// Recent deployments
 function addRecentDeployment(data) {
     recentDeployments.unshift(data);
     updateRecentDeployments();
@@ -305,20 +426,31 @@ function addRecentDeployment(data) {
 
 function updateRecentDeployments() {
     const container = document.getElementById('recent-deployments');
+    const countEl = document.getElementById('recent-count');
+
+    countEl.textContent = recentDeployments.length;
 
     if (recentDeployments.length === 0) {
-        container.innerHTML = '<p class="empty-state">No tokens deployed yet in this session.</p>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <span class="empty-icon">◇</span>
+                <p>No tokens deployed yet in this session</p>
+            </div>
+        `;
         return;
     }
 
     container.innerHTML = recentDeployments.map(d => `
         <div class="deployment-item">
             <div class="deployment-info">
-                <span class="deployment-name">${d.name} (${d.symbol})</span>
-                <span class="deployment-address">${truncateAddress(d.address)}</span>
+                <div class="deployment-avatar">${d.name.charAt(0).toUpperCase()}</div>
+                <div class="deployment-details">
+                    <h4>${d.name} (${d.symbol})</h4>
+                    <span class="deployment-address">${truncateAddress(d.address)}</span>
+                </div>
             </div>
             <div class="deployment-actions">
-                <a href="${d.explorer_url}" target="_blank">Explorer →</a>
+                <a href="${d.explorer_url}" target="_blank">View →</a>
             </div>
         </div>
     `).join('');
@@ -326,16 +458,11 @@ function updateRecentDeployments() {
 
 // Utility functions
 function setButtonLoading(btn, loading) {
-    const textSpan = btn.querySelector('.btn-text');
-    const loadingSpan = btn.querySelector('.btn-loading');
-
     if (loading) {
-        textSpan.style.display = 'none';
-        loadingSpan.style.display = 'inline-flex';
+        btn.classList.add('loading');
         btn.disabled = true;
     } else {
-        textSpan.style.display = 'inline';
-        loadingSpan.style.display = 'none';
+        btn.classList.remove('loading');
         btn.disabled = false;
     }
 }
@@ -346,20 +473,24 @@ function truncateAddress(address) {
 }
 
 function formatSupply(supply, decimals) {
-    const num = BigInt(supply);
-    const divisor = BigInt(10 ** decimals);
-    const whole = num / divisor;
-    const fraction = num % divisor;
+    try {
+        const num = BigInt(supply);
+        const divisor = BigInt(10 ** decimals);
+        const whole = num / divisor;
+        const fraction = num % divisor;
 
-    if (fraction === 0n) {
-        return whole.toLocaleString();
+        if (fraction === 0n) {
+            return Number(whole).toLocaleString();
+        }
+
+        const fractionStr = fraction.toString().padStart(decimals, '0').replace(/0+$/, '');
+        return `${Number(whole).toLocaleString()}.${fractionStr}`;
+    } catch {
+        return supply.toString();
     }
-
-    const fractionStr = fraction.toString().padStart(decimals, '0').replace(/0+$/, '');
-    return `${whole.toLocaleString()}.${fractionStr}`;
 }
 
 function formatBalance(balance) {
     const num = parseInt(balance, 16) || parseInt(balance) || 0;
-    return (num / 1_000_000_000).toFixed(4) + ' tokens';
+    return (num / 1_000_000_000).toFixed(4) + ' TYCHO';
 }
