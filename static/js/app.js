@@ -1,7 +1,83 @@
-// Tycho Token Constructor - Frontend Application
+// Tycho Token Constructor - Frontend Application with Sparx Wallet Integration
 
 const API_BASE = '';
 const recentDeployments = [];
+
+// Wallet state
+let provider = null;
+let selectedAddress = null;
+let selectedPublicKey = null;
+let isWalletConnected = false;
+
+// TIP-3 Token Root ABI (minimal for deployment)
+const TokenRootAbi = {
+    "ABI version": 2,
+    "version": "2.2",
+    "header": ["pubkey", "time", "expire"],
+    "functions": [
+        {
+            "name": "constructor",
+            "inputs": [
+                {"name": "initialSupplyTo", "type": "address"},
+                {"name": "initialSupply", "type": "uint128"},
+                {"name": "deployWalletValue", "type": "uint128"},
+                {"name": "mintDisabled", "type": "bool"},
+                {"name": "burnByRootDisabled", "type": "bool"},
+                {"name": "burnPaused", "type": "bool"},
+                {"name": "remainingGasTo", "type": "address"}
+            ],
+            "outputs": []
+        },
+        {
+            "name": "mint",
+            "inputs": [
+                {"name": "amount", "type": "uint128"},
+                {"name": "recipient", "type": "address"},
+                {"name": "deployWalletValue", "type": "uint128"},
+                {"name": "remainingGasTo", "type": "address"},
+                {"name": "notify", "type": "bool"},
+                {"name": "payload", "type": "cell"}
+            ],
+            "outputs": []
+        },
+        {
+            "name": "name",
+            "inputs": [],
+            "outputs": [{"name": "value0", "type": "string"}]
+        },
+        {
+            "name": "symbol",
+            "inputs": [],
+            "outputs": [{"name": "value0", "type": "string"}]
+        },
+        {
+            "name": "decimals",
+            "inputs": [],
+            "outputs": [{"name": "value0", "type": "uint8"}]
+        },
+        {
+            "name": "totalSupply",
+            "inputs": [],
+            "outputs": [{"name": "value0", "type": "uint128"}]
+        },
+        {
+            "name": "rootOwner",
+            "inputs": [],
+            "outputs": [{"name": "value0", "type": "address"}]
+        }
+    ],
+    "events": [],
+    "data": [
+        {"key": 1, "name": "name_", "type": "string"},
+        {"key": 2, "name": "symbol_", "type": "string"},
+        {"key": 3, "name": "decimals_", "type": "uint8"},
+        {"key": 4, "name": "rootOwner_", "type": "address"},
+        {"key": 5, "name": "walletCode_", "type": "cell"},
+        {"key": 6, "name": "randomNonce_", "type": "uint256"},
+        {"key": 7, "name": "deployer_", "type": "address"}
+    ],
+    "fields": []
+};
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,8 +86,221 @@ document.addEventListener('DOMContentLoaded', () => {
     initLivePreview();
     initDecimalButtons();
     initSupplyPresets();
-    refreshWallet();
+    initWalletConnection();
 });
+
+// Initialize wallet connection
+async function initWalletConnection() {
+    const connectBtn = document.getElementById('connect-wallet-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+
+    connectBtn.addEventListener('click', connectWallet);
+    disconnectBtn.addEventListener('click', disconnectWallet);
+
+    // Check if provider is available
+    if (typeof everscaleProvider !== 'undefined') {
+        provider = new everscaleProvider.ProviderRpcClient();
+
+        // Check for existing permissions
+        try {
+            const providerState = await provider.getProviderState();
+            if (providerState.permissions.accountInteraction) {
+                // Already connected
+                selectedAddress = providerState.permissions.accountInteraction.address;
+                selectedPublicKey = providerState.permissions.accountInteraction.publicKey;
+                isWalletConnected = true;
+                updateWalletUI();
+                await refreshWalletBalance();
+            }
+        } catch (e) {
+            console.log('No existing wallet connection');
+        }
+
+        // Subscribe to permission changes
+        provider.subscribe('permissionsChanged').then(subscription => {
+            subscription.on('data', (event) => {
+                if (event.permissions.accountInteraction) {
+                    selectedAddress = event.permissions.accountInteraction.address;
+                    selectedPublicKey = event.permissions.accountInteraction.publicKey;
+                    isWalletConnected = true;
+                } else {
+                    selectedAddress = null;
+                    selectedPublicKey = null;
+                    isWalletConnected = false;
+                }
+                updateWalletUI();
+            });
+        });
+    }
+}
+
+// Connect wallet
+async function connectWallet() {
+    const connectBtn = document.getElementById('connect-wallet-btn');
+    setButtonLoading(connectBtn, true);
+
+    try {
+        // Check if provider exists
+        if (typeof everscaleProvider === 'undefined') {
+            showWalletInstallModal();
+            return;
+        }
+
+        if (!provider) {
+            provider = new everscaleProvider.ProviderRpcClient();
+        }
+
+        // Check if extension is installed
+        const hasProvider = await provider.hasProvider();
+        if (!hasProvider) {
+            showWalletInstallModal();
+            return;
+        }
+
+        // Request permissions
+        const permissions = await provider.requestPermissions({
+            permissions: ['basic', 'accountInteraction']
+        });
+
+        if (permissions.accountInteraction) {
+            selectedAddress = permissions.accountInteraction.address;
+            selectedPublicKey = permissions.accountInteraction.publicKey;
+            isWalletConnected = true;
+            updateWalletUI();
+            await refreshWalletBalance();
+        } else {
+            throw new Error('User denied wallet connection');
+        }
+    } catch (error) {
+        console.error('Failed to connect wallet:', error);
+        if (error.code === 4001 || error.message?.includes('denied')) {
+            showNotification('Connection cancelled by user', 'warning');
+        } else {
+            showNotification('Failed to connect wallet: ' + error.message, 'error');
+        }
+    } finally {
+        setButtonLoading(connectBtn, false);
+    }
+}
+
+// Disconnect wallet
+async function disconnectWallet() {
+    try {
+        if (provider) {
+            await provider.disconnect();
+        }
+        selectedAddress = null;
+        selectedPublicKey = null;
+        isWalletConnected = false;
+        updateWalletUI();
+    } catch (error) {
+        console.error('Failed to disconnect:', error);
+    }
+}
+
+// Update wallet UI
+function updateWalletUI() {
+    const connectBtn = document.getElementById('connect-wallet-btn');
+    const walletStatus = document.getElementById('wallet-status');
+    const addressEl = document.getElementById('header-address');
+    const deployNotice = document.getElementById('wallet-required-notice');
+    const mintNotice = document.getElementById('mint-wallet-notice');
+    const deployBtn = document.getElementById('deploy-btn');
+    const mintBtn = document.getElementById('mint-btn');
+
+    if (isWalletConnected && selectedAddress) {
+        connectBtn.style.display = 'none';
+        walletStatus.style.display = 'flex';
+        addressEl.textContent = truncateAddress(selectedAddress.toString());
+        addressEl.title = selectedAddress.toString();
+
+        // Enable action buttons
+        deployBtn.disabled = false;
+        mintBtn.disabled = false;
+        deployNotice.classList.add('hidden');
+        mintNotice.classList.add('hidden');
+
+        // Copy address on click
+        addressEl.onclick = () => {
+            navigator.clipboard.writeText(selectedAddress.toString());
+            showNotification('Address copied to clipboard', 'success');
+        };
+    } else {
+        connectBtn.style.display = 'inline-flex';
+        walletStatus.style.display = 'none';
+
+        // Disable action buttons
+        deployBtn.disabled = true;
+        mintBtn.disabled = true;
+        deployNotice.classList.remove('hidden');
+        mintNotice.classList.remove('hidden');
+    }
+}
+
+// Refresh wallet balance
+async function refreshWalletBalance() {
+    if (!isWalletConnected || !selectedAddress || !provider) {
+        document.getElementById('header-balance').textContent = '0.00 TYCHO';
+        return;
+    }
+
+    try {
+        const balance = await provider.getBalance(selectedAddress);
+        const balanceNum = parseInt(balance) / 1_000_000_000;
+        document.getElementById('header-balance').textContent = `${balanceNum.toFixed(2)} TYCHO`;
+    } catch (error) {
+        console.error('Failed to get balance:', error);
+        document.getElementById('header-balance').textContent = 'Error';
+    }
+}
+
+// Show wallet install modal
+function showWalletInstallModal() {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('wallet-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wallet-modal';
+        modal.className = 'wallet-modal';
+        modal.innerHTML = `
+            <div class="wallet-modal-content">
+                <h3>Wallet Required</h3>
+                <p>To deploy tokens on Tycho network, you need to install the Sparx wallet extension or use the EVER Wallet.</p>
+                <div class="wallet-modal-actions">
+                    <a href="https://sparxwallet.com" target="_blank" class="btn btn-primary">Get Sparx Wallet</a>
+                    <button class="btn btn-secondary" onclick="closeWalletModal()">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeWalletModal() {
+    const modal = document.getElementById('wallet-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    // Remove existing notification
+    const existing = document.querySelector('.notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()">×</button>
+    `;
+    document.body.appendChild(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => notification.remove(), 5000);
+}
 
 // Tab functionality
 function initTabs() {
@@ -147,22 +436,14 @@ function initSupplyPresets() {
     });
 }
 
-// Refresh wallet info
-async function refreshWallet() {
-    try {
-        const response = await fetch(`${API_BASE}/wallet`);
-        const data = await response.json();
-
-        document.getElementById('header-balance').textContent = `${data.balance.toFixed(2)} TYCHO`;
-    } catch (error) {
-        document.getElementById('header-balance').textContent = 'Error';
-        console.error('Failed to load wallet info:', error);
-    }
-}
-
-// Deploy token handler
+// Deploy token handler - uses connected wallet
 async function handleDeploy(e) {
     e.preventDefault();
+
+    if (!isWalletConnected || !selectedAddress) {
+        showNotification('Please connect your wallet first', 'warning');
+        return;
+    }
 
     const btn = document.getElementById('deploy-btn');
     const resultDiv = document.getElementById('deploy-result');
@@ -170,26 +451,33 @@ async function handleDeploy(e) {
     setButtonLoading(btn, true);
     resultDiv.style.display = 'none';
 
-    const supplyRaw = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
+    const name = document.getElementById('token-name').value;
+    const symbol = document.getElementById('token-symbol').value.toUpperCase();
     const decimals = parseInt(document.getElementById('token-decimals').value) || 9;
+    const supplyRaw = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
     const rawSupply = BigInt(supplyRaw) * BigInt(10 ** decimals);
+    const mintDisabled = !document.getElementById('mintable').checked;
+    const burnByRootDisabled = !document.getElementById('burnable').checked;
+    const burnPaused = document.getElementById('burn-paused').checked;
 
-    const payload = {
-        name: document.getElementById('token-name').value,
-        symbol: document.getElementById('token-symbol').value.toUpperCase(),
-        decimals: decimals,
-        initial_supply: Number(rawSupply),
-        mint_disabled: !document.getElementById('mintable').checked,
-        burn_by_root_disabled: !document.getElementById('burnable').checked,
-        burn_paused: document.getElementById('burn-paused').checked
-    };
-
-    const initialSupplyTo = document.getElementById('initial-supply-to').value.trim();
-    if (initialSupplyTo) {
-        payload.initial_supply_to = initialSupplyTo;
-    }
+    const initialSupplyTo = document.getElementById('initial-supply-to').value.trim() || selectedAddress.toString();
 
     try {
+        // Deploy via backend API which handles the contract deployment
+        // The backend will request signature from the connected wallet
+        const payload = {
+            name: name,
+            symbol: symbol,
+            decimals: decimals,
+            initial_supply: Number(rawSupply),
+            initial_supply_to: initialSupplyTo,
+            mint_disabled: mintDisabled,
+            burn_by_root_disabled: burnByRootDisabled,
+            burn_paused: burnPaused,
+            owner_address: selectedAddress.toString(),
+            owner_public_key: selectedPublicKey
+        };
+
         const response = await fetch(`${API_BASE}/tokens`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -201,7 +489,7 @@ async function handleDeploy(e) {
         if (response.ok && data.success) {
             showDeployResult(resultDiv, data, true);
             addRecentDeployment(data);
-            refreshWallet();
+            await refreshWalletBalance();
             resetForm();
         } else {
             showDeployResult(resultDiv, { error: data.detail || 'Deployment failed' }, false);
@@ -251,6 +539,37 @@ async function handleGetInfo(e) {
     resultDiv.style.display = 'none';
 
     try {
+        // Try to get info via provider if connected
+        if (isWalletConnected && provider) {
+            try {
+                const contract = new provider.Contract(TokenRootAbi, new everscaleProvider.Address(address));
+
+                const [nameRes, symbolRes, decimalsRes, totalSupplyRes, rootOwnerRes] = await Promise.all([
+                    contract.methods.name({}).call(),
+                    contract.methods.symbol({}).call(),
+                    contract.methods.decimals({}).call(),
+                    contract.methods.totalSupply({}).call(),
+                    contract.methods.rootOwner({}).call()
+                ]);
+
+                const data = {
+                    address: address,
+                    name: nameRes.value0,
+                    symbol: symbolRes.value0,
+                    decimals: parseInt(decimalsRes.value0),
+                    total_supply: totalSupplyRes.value0,
+                    root_owner: rootOwnerRes.value0.toString(),
+                    explorer_url: `https://tychoprotocol.com/explorer/accounts/${address}`
+                };
+
+                showInfoResult(resultDiv, data, true);
+                return;
+            } catch (e) {
+                console.log('Failed to get info via provider, falling back to API:', e);
+            }
+        }
+
+        // Fallback to API
         const response = await fetch(`${API_BASE}/tokens/${encodeURIComponent(address)}`);
         const data = await response.json();
 
@@ -270,22 +589,57 @@ async function handleGetInfo(e) {
 async function handleMint(e) {
     e.preventDefault();
 
+    if (!isWalletConnected || !selectedAddress) {
+        showNotification('Please connect your wallet first', 'warning');
+        return;
+    }
+
     const btn = document.getElementById('mint-btn');
     const resultDiv = document.getElementById('mint-result');
 
     setButtonLoading(btn, true);
     resultDiv.style.display = 'none';
 
+    const tokenAddress = document.getElementById('mint-token-address').value.trim();
     const amount = document.getElementById('mint-amount').value.replace(/,/g, '');
-
-    const payload = {
-        token_address: document.getElementById('mint-token-address').value.trim(),
-        amount: parseInt(amount),
-        recipient: document.getElementById('mint-recipient').value.trim(),
-        notify: document.getElementById('mint-notify').checked
-    };
+    const recipient = document.getElementById('mint-recipient').value.trim();
+    const notify = document.getElementById('mint-notify').checked;
 
     try {
+        // Call mint via connected wallet
+        if (provider) {
+            const contract = new provider.Contract(TokenRootAbi, new everscaleProvider.Address(tokenAddress));
+
+            const transaction = await contract.methods.mint({
+                amount: amount,
+                recipient: new everscaleProvider.Address(recipient),
+                deployWalletValue: '100000000', // 0.1 TYCHO for wallet deployment
+                remainingGasTo: selectedAddress,
+                notify: notify,
+                payload: ''
+            }).send({
+                from: selectedAddress,
+                amount: '500000000', // 0.5 TYCHO for gas
+                bounce: true
+            });
+
+            showMintResult(resultDiv, {
+                transaction_id: transaction.id.hash,
+                message: 'Tokens minted successfully'
+            }, true);
+            await refreshWalletBalance();
+            return;
+        }
+
+        // Fallback to API
+        const payload = {
+            token_address: tokenAddress,
+            amount: parseInt(amount),
+            recipient: recipient,
+            notify: notify,
+            sender_address: selectedAddress.toString()
+        };
+
         const response = await fetch(`${API_BASE}/tokens/mint`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -296,7 +650,7 @@ async function handleMint(e) {
 
         if (response.ok && data.success) {
             showMintResult(resultDiv, data, true);
-            refreshWallet();
+            await refreshWalletBalance();
         } else {
             showMintResult(resultDiv, { error: data.detail || 'Mint failed' }, false);
         }
@@ -463,7 +817,13 @@ function setButtonLoading(btn, loading) {
         btn.disabled = true;
     } else {
         btn.classList.remove('loading');
-        btn.disabled = false;
+        // Only re-enable if wallet is connected (for deploy/mint buttons)
+        const isActionButton = btn.id === 'deploy-btn' || btn.id === 'mint-btn';
+        if (isActionButton) {
+            btn.disabled = !isWalletConnected;
+        } else {
+            btn.disabled = false;
+        }
     }
 }
 

@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Everscale Inpage Provider for Sparx Wallet -->
+    <script src="https://unpkg.com/everscale-inpage-provider@0.6.2/dist/index.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -17,12 +19,24 @@
                 <span class="logo-icon">◆</span>
                 <span class="logo-text">Tycho Token Constructor</span>
             </div>
-            <div class="wallet-status" id="wallet-status">
-                <div class="status-dot online"></div>
-                <div class="wallet-info-compact">
-                    <span class="network-badge">Tycho Testnet</span>
-                    <span class="balance-display" id="header-balance">1000.00 TYCHO</span>
+            <div class="wallet-section">
+                <div class="wallet-status" id="wallet-status" style="display: none;">
+                    <div class="status-dot online"></div>
+                    <div class="wallet-info-compact">
+                        <span class="network-badge">Tycho Testnet</span>
+                        <span class="balance-display" id="header-balance">0.00 TYCHO</span>
+                    </div>
+                    <span class="wallet-address" id="header-address" title="Click to copy"></span>
+                    <button class="btn-disconnect" id="disconnect-btn" title="Disconnect wallet">×</button>
                 </div>
+                <button class="btn btn-connect" id="connect-wallet-btn">
+                    <span class="btn-icon">◇</span>
+                    <span class="btn-text">Connect Wallet</span>
+                    <span class="btn-loading">
+                        <span class="spinner"></span>
+                        Connecting...
+                    </span>
+                </button>
             </div>
         </div>
     </header>
@@ -177,7 +191,11 @@
 
                         <!-- Deploy Button -->
                         <div class="form-actions">
-                            <button type="submit" class="btn btn-primary btn-large" id="deploy-btn">
+                            <div id="wallet-required-notice" class="wallet-notice">
+                                <span class="notice-icon">⚠</span>
+                                <span>Connect your Sparx wallet to deploy tokens</span>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-large" id="deploy-btn" disabled>
                                 <span class="btn-icon">◆</span>
                                 <span class="btn-text">Deploy Token</span>
                                 <span class="btn-loading">
@@ -185,7 +203,7 @@
                                     Deploying...
                                 </span>
                             </button>
-                            <p class="deploy-hint">Estimated fee: ~0.5 TYCHO</p>
+                            <p class="deploy-hint">Estimated fee: ~0.5 TYCHO (paid from your wallet)</p>
                         </div>
                     </form>
 
@@ -340,7 +358,11 @@
                     </div>
 
                     <div class="form-actions">
-                        <button type="submit" class="btn btn-primary btn-large" id="mint-btn">
+                        <div id="mint-wallet-notice" class="wallet-notice">
+                            <span class="notice-icon">⚠</span>
+                            <span>Connect your Sparx wallet to mint tokens</span>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-large" id="mint-btn" disabled>
                             <span class="btn-icon">✦</span>
                             <span class="btn-text">Mint Tokens</span>
                             <span class="btn-loading">
