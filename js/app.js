@@ -933,8 +933,10 @@ function initForms() {
     if (deployForm) {
         deployForm.addEventListener('submit', handleDeploy);
     }
-    document.getElementById('info-form').addEventListener('submit', handleGetInfo);
-    document.getElementById('mint-form').addEventListener('submit', handleMint);
+    const mintForm = document.getElementById('mint-form');
+    if (mintForm) {
+        mintForm.addEventListener('submit', handleMint);
+    }
 }
 
 function initLivePreview() {
