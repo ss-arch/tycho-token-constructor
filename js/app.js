@@ -223,6 +223,9 @@ const ZERO_ADDRESS = "0:00000000000000000000000000000000000000000000000000000000
 // Explorer URL
 const EXPLORER_URL = "https://testnet.tychoprotocol.com";
 
+// Token database refresh interval (5 minutes)
+const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000;
+
 // ============== Application State ==============
 
 const recentDeployments = [];
@@ -230,6 +233,12 @@ let provider = null;
 let selectedAddress = null;
 let selectedPublicKey = null;
 let isWalletConnected = false;
+
+// Token Database
+let tokenDatabase = [];
+let tokenIndex = {};
+let lastTokenUpdate = null;
+let isLoadingTokens = false;
 
 // ============== Initialization ==============
 
@@ -240,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDecimalInput();
     initSupplyPresets();
     initWalletConnection();
+    initTokenDatabase();
 });
 
 // ============== Wallet Provider Detection ==============
@@ -821,121 +831,279 @@ async function handleDeploy(e) {
     }
 }
 
-// ============== Token Info ==============
+// ============== Token Database ==============
 
-function isValidAddress(input) {
-    // Tycho/Everscale addresses start with 0: followed by 64 hex characters
-    return /^0:[a-fA-F0-9]{64}$/.test(input);
+async function initTokenDatabase() {
+    // Load tokens on init
+    await loadTokenDatabase();
+
+    // Set up auto-refresh every 5 minutes
+    setInterval(loadTokenDatabase, TOKEN_REFRESH_INTERVAL);
+
+    // Set up search input handler
+    const searchInput = document.getElementById('info-address');
+    if (searchInput) {
+        searchInput.addEventListener('input', handleTokenSearch);
+    }
 }
 
-async function handleGetInfo(e) {
-    e.preventDefault();
+async function loadTokenDatabase() {
+    if (isLoadingTokens) return;
 
-    const btn = document.getElementById('info-btn');
+    isLoadingTokens = true;
+    const statusEl = document.getElementById('token-db-status');
+
+    try {
+        if (statusEl) statusEl.textContent = 'Loading tokens...';
+
+        // Try to fetch from Tycho Explorer API
+        // Using a CORS proxy or direct fetch
+        const response = await fetch(`${EXPLORER_URL}/api/v1/tokens?limit=1000`);
+
+        if (response.ok) {
+            const data = await response.json();
+            tokenDatabase = data.tokens || data || [];
+        } else {
+            // Fallback: try alternative endpoint
+            const altResponse = await fetch(`${EXPLORER_URL}/tokens.json`);
+            if (altResponse.ok) {
+                tokenDatabase = await altResponse.json();
+            }
+        }
+    } catch (error) {
+        // If API fails, use locally deployed tokens + any cached data
+        console.log('Could not fetch from explorer, using local data');
+    }
+
+    // Add recently deployed tokens from this session
+    recentDeployments.forEach(token => {
+        if (!tokenDatabase.find(t => t.address === token.address)) {
+            tokenDatabase.unshift({
+                address: token.address,
+                name: token.name,
+                symbol: token.symbol,
+                decimals: token.decimals,
+                totalSupply: token.initial_supply,
+                owner: token.owner
+            });
+        }
+    });
+
+    // Build search index
+    buildTokenIndex();
+
+    lastTokenUpdate = new Date();
+    isLoadingTokens = false;
+
+    if (statusEl) {
+        statusEl.textContent = `${tokenDatabase.length} tokens • Updated ${formatTime(lastTokenUpdate)}`;
+    }
+
+    // Update the token list display
+    displayAllTokens();
+}
+
+function buildTokenIndex() {
+    tokenIndex = {};
+
+    tokenDatabase.forEach((token, idx) => {
+        const name = (token.name || '').toLowerCase();
+        const symbol = (token.symbol || '').toLowerCase();
+        const address = (token.address || '').toLowerCase();
+
+        // Index by name words
+        name.split(/\s+/).forEach(word => {
+            if (word.length > 0) {
+                if (!tokenIndex[word]) tokenIndex[word] = [];
+                if (!tokenIndex[word].includes(idx)) tokenIndex[word].push(idx);
+            }
+        });
+
+        // Index by symbol
+        if (symbol) {
+            if (!tokenIndex[symbol]) tokenIndex[symbol] = [];
+            if (!tokenIndex[symbol].includes(idx)) tokenIndex[symbol].push(idx);
+        }
+
+        // Index by address prefix
+        if (address) {
+            const addrPrefix = address.substring(0, 10);
+            if (!tokenIndex[addrPrefix]) tokenIndex[addrPrefix] = [];
+            if (!tokenIndex[addrPrefix].includes(idx)) tokenIndex[addrPrefix].push(idx);
+        }
+    });
+}
+
+function searchTokens(query) {
+    if (!query || query.trim() === '') {
+        return tokenDatabase;
+    }
+
+    const searchTerms = query.toLowerCase().trim().split(/\s+/);
+    const resultIndices = new Set();
+
+    // Search in index
+    searchTerms.forEach(term => {
+        // Exact match in index
+        if (tokenIndex[term]) {
+            tokenIndex[term].forEach(idx => resultIndices.add(idx));
+        }
+
+        // Partial match
+        Object.keys(tokenIndex).forEach(key => {
+            if (key.includes(term) || term.includes(key)) {
+                tokenIndex[key].forEach(idx => resultIndices.add(idx));
+            }
+        });
+    });
+
+    // Also do direct search for better results
+    tokenDatabase.forEach((token, idx) => {
+        const name = (token.name || '').toLowerCase();
+        const symbol = (token.symbol || '').toLowerCase();
+        const address = (token.address || '').toLowerCase();
+
+        const matches = searchTerms.every(term =>
+            name.includes(term) ||
+            symbol.includes(term) ||
+            address.includes(term)
+        );
+
+        if (matches) resultIndices.add(idx);
+    });
+
+    return Array.from(resultIndices).map(idx => tokenDatabase[idx]);
+}
+
+function handleTokenSearch(e) {
+    const query = e.target.value;
+    const results = searchTokens(query);
+    displayTokenResults(results, query);
+}
+
+function displayAllTokens() {
+    displayTokenResults(tokenDatabase, '');
+}
+
+function displayTokenResults(tokens, query) {
     const resultDiv = document.getElementById('info-result');
-    const input = document.getElementById('info-address').value.trim();
+    if (!resultDiv) return;
 
-    if (!input) {
-        showNotification('Please enter a token address or name', 'warning');
+    resultDiv.style.display = 'block';
+
+    if (tokens.length === 0) {
+        resultDiv.innerHTML = `
+            <div class="no-results">
+                <h3>No tokens found</h3>
+                <p>No tokens match "${query}"</p>
+                <p style="margin-top: 1rem;">
+                    <a href="${EXPLORER_URL}/tokens" target="_blank">Browse all tokens on Tycho Explorer</a>
+                </p>
+            </div>
+        `;
         return;
     }
 
-    setButtonLoading(btn, true);
-    resultDiv.style.display = 'none';
+    const tokenListHtml = tokens.slice(0, 50).map(token => `
+        <div class="token-list-item" onclick="selectToken('${token.address}')">
+            <div class="token-avatar-small">
+                <span>${(token.name || '?').charAt(0).toUpperCase()}</span>
+            </div>
+            <div class="token-list-info">
+                <div class="token-list-name">${token.name || 'Unknown'} <span class="token-list-symbol">${token.symbol || ''}</span></div>
+                <div class="token-list-address">${truncateAddress(token.address)}</div>
+            </div>
+            <div class="token-list-supply">
+                ${token.totalSupply ? formatSupply(token.totalSupply, token.decimals || 0) : '-'}
+            </div>
+            <a href="${EXPLORER_URL}/accounts/${token.address}" target="_blank" class="token-list-link" onclick="event.stopPropagation()">
+                View ↗
+            </a>
+        </div>
+    `).join('');
 
-    // Check if input is an address or a name
-    if (isValidAddress(input)) {
-        // Search by address using provider
-        await searchByAddress(input, resultDiv, btn);
-    } else {
-        // Search by name - redirect to explorer or show message
-        showInfoResult(resultDiv, {
-            isNameSearch: true,
-            searchTerm: input,
-            explorer_url: `${EXPLORER_URL}/tokens`
-        }, true);
-        setButtonLoading(btn, false);
+    resultDiv.innerHTML = `
+        <div class="token-list-header">
+            <span>${tokens.length} token${tokens.length !== 1 ? 's' : ''} ${query ? `matching "${query}"` : 'in database'}</span>
+            <span id="token-db-status" class="token-db-status">${lastTokenUpdate ? `Updated ${formatTime(lastTokenUpdate)}` : 'Loading...'}</span>
+        </div>
+        <div class="token-list">
+            ${tokenListHtml}
+        </div>
+        ${tokens.length > 50 ? `<p class="token-list-more">Showing first 50 results. <a href="${EXPLORER_URL}/tokens" target="_blank">View all on Explorer</a></p>` : ''}
+    `;
+}
+
+function selectToken(address) {
+    const token = tokenDatabase.find(t => t.address === address);
+    if (token) {
+        showTokenDetail(token);
     }
 }
 
-async function searchByAddress(address, resultDiv, btn) {
-    try {
-        if (!provider) {
-            throw new Error('Wallet not connected. Connect wallet to query token info.');
-        }
+function showTokenDetail(token) {
+    const resultDiv = document.getElementById('info-result');
+    if (!resultDiv) return;
 
-        // Query token contract using provider
-        const runLocalParams = {
-            address: address,
-            abi: JSON.stringify(TokenRootAbi),
-            functionCall: {
-                method: 'name',
-                params: { answerId: 0 }
-            }
-        };
+    resultDiv.innerHTML = `
+        <div class="token-detail">
+            <button class="back-btn" onclick="displayAllTokens()">← Back to list</button>
+            <div class="token-header" style="margin: 1.5rem 0; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                <div class="token-avatar">
+                    <span>${(token.name || '?').charAt(0).toUpperCase()}</span>
+                </div>
+                <div class="token-identity">
+                    <h3 class="token-name">${token.name || 'Unknown'}</h3>
+                    <span class="token-symbol">${token.symbol || ''}</span>
+                </div>
+            </div>
+            <div class="result-details">
+                <div class="result-row">
+                    <span class="result-label">Address</span>
+                    <span class="result-value address-copy" title="Click to copy" onclick="copyToClipboard('${token.address}')">${token.address}</span>
+                </div>
+                <div class="result-row">
+                    <span class="result-label">Total Supply</span>
+                    <span class="result-value">${token.totalSupply ? formatSupply(token.totalSupply, token.decimals || 0) : '-'} ${token.symbol || ''}</span>
+                </div>
+                <div class="result-row">
+                    <span class="result-label">Decimals</span>
+                    <span class="result-value">${token.decimals ?? '-'}</span>
+                </div>
+                ${token.owner ? `
+                <div class="result-row">
+                    <span class="result-label">Owner</span>
+                    <span class="result-value">${truncateAddress(token.owner)}</span>
+                </div>
+                ` : ''}
+                <div class="result-row">
+                    <span class="result-label">Explorer</span>
+                    <span class="result-value"><a href="${EXPLORER_URL}/accounts/${token.address}" target="_blank">View on Tycho Explorer ↗</a></span>
+                </div>
+            </div>
+        </div>
+    `;
+}
 
-        // Get token name
-        const nameResult = await provider.request({
-            method: 'runLocal',
-            params: {
-                ...runLocalParams,
-                functionCall: { method: 'name', params: { answerId: 0 } }
-            }
-        });
+function formatTime(date) {
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
 
-        // Get token symbol
-        const symbolResult = await provider.request({
-            method: 'runLocal',
-            params: {
-                ...runLocalParams,
-                functionCall: { method: 'symbol', params: { answerId: 0 } }
-            }
-        });
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return date.toLocaleTimeString();
+}
 
-        // Get decimals
-        const decimalsResult = await provider.request({
-            method: 'runLocal',
-            params: {
-                ...runLocalParams,
-                functionCall: { method: 'decimals', params: { answerId: 0 } }
-            }
-        });
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text);
+    showNotification('Address copied to clipboard', 'success');
+}
 
-        // Get total supply
-        const supplyResult = await provider.request({
-            method: 'runLocal',
-            params: {
-                ...runLocalParams,
-                functionCall: { method: 'totalSupply', params: { answerId: 0 } }
-            }
-        });
-
-        // Get root owner
-        const ownerResult = await provider.request({
-            method: 'runLocal',
-            params: {
-                ...runLocalParams,
-                functionCall: { method: 'rootOwner', params: { answerId: 0 } }
-            }
-        });
-
-        const data = {
-            address: address,
-            name: nameResult?.output?.value0 || 'Unknown',
-            symbol: symbolResult?.output?.value0 || 'Unknown',
-            decimals: parseInt(decimalsResult?.output?.value0) || 0,
-            total_supply: supplyResult?.output?.value0 || '0',
-            root_owner: ownerResult?.output?.value0 || ZERO_ADDRESS,
-            explorer_url: `${EXPLORER_URL}/accounts/${address}`
-        };
-
-        showInfoResult(resultDiv, data, true);
-
-    } catch (error) {
-        showInfoResult(resultDiv, { error: error.message || 'Failed to get token info. Make sure the address is a valid TIP-3 token contract.' }, false);
-    } finally {
-        setButtonLoading(btn, false);
-    }
+// Legacy handler for form submit
+async function handleGetInfo(e) {
+    e.preventDefault();
+    const input = document.getElementById('info-address').value.trim();
+    handleTokenSearch({ target: { value: input } });
 }
 
 // ============== Mint Tokens ==============
@@ -1232,78 +1400,6 @@ function showDeployResult(div, data, success) {
             <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
         `;
     }
-}
-
-function showInfoResult(div, data, success) {
-    div.style.display = 'block';
-    div.className = `info-result-card ${success ? '' : 'error'}`;
-
-    if (success) {
-        // Check if this is a name search (no direct results)
-        if (data.isNameSearch) {
-            div.innerHTML = `
-                <div class="name-search-result">
-                    <h3>Search by Name</h3>
-                    <p style="color: var(--text-secondary); margin: 1rem 0;">
-                        To search for token "<strong>${data.searchTerm}</strong>" by name, please use the Tycho Explorer.
-                    </p>
-                    <p style="color: var(--text-muted); margin-bottom: 1rem;">
-                        If you have the token contract address (starting with 0:...), enter it above for detailed information.
-                    </p>
-                    <a href="${data.explorer_url}" target="_blank" class="btn btn-primary">
-                        Browse Tokens on Explorer
-                    </a>
-                </div>
-            `;
-        } else {
-            div.innerHTML = `
-                <div class="token-header" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
-                    <div class="token-avatar">
-                        <span>${data.name.charAt(0).toUpperCase()}</span>
-                    </div>
-                    <div class="token-identity">
-                        <h3 class="token-name">${data.name}</h3>
-                        <span class="token-symbol">${data.symbol}</span>
-                    </div>
-                </div>
-                <div class="result-details">
-                    <div class="result-row">
-                        <span class="result-label">Address</span>
-                        <span class="result-value address-copy" title="Click to copy" onclick="copyToClipboard('${data.address}')">${truncateAddress(data.address)}</span>
-                    </div>
-                    <div class="result-row">
-                        <span class="result-label">Total Supply</span>
-                        <span class="result-value">${formatSupply(data.total_supply, data.decimals)} ${data.symbol}</span>
-                    </div>
-                    <div class="result-row">
-                        <span class="result-label">Decimals</span>
-                        <span class="result-value">${data.decimals}</span>
-                    </div>
-                    <div class="result-row">
-                        <span class="result-label">Root Owner</span>
-                        <span class="result-value">${truncateAddress(data.root_owner)}</span>
-                    </div>
-                    <div class="result-row">
-                        <span class="result-label">Explorer</span>
-                        <span class="result-value"><a href="${data.explorer_url}" target="_blank">View on Tycho Explorer</a></span>
-                    </div>
-                </div>
-            `;
-        }
-    } else {
-        div.innerHTML = `
-            <h3 style="color: var(--error);">Token Not Found</h3>
-            <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
-            <p style="color: var(--text-muted); margin-top: 1rem;">
-                <a href="${EXPLORER_URL}/tokens" target="_blank">Browse all tokens on Tycho Explorer</a>
-            </p>
-        `;
-    }
-}
-
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text);
-    showNotification('Address copied to clipboard', 'success');
 }
 
 function showMintResult(div, data, success) {

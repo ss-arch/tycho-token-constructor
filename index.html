@@ -278,23 +278,19 @@
             <div class="single-panel">
                 <div class="panel-header">
                     <h1>Token Information</h1>
-                    <p class="subtitle">Look up any TIP-3 token on Tycho Testnet</p>
+                    <p class="subtitle">Search tokens on Tycho Testnet by name, symbol, or address</p>
                 </div>
 
                 <form id="info-form" class="search-form">
                     <div class="search-input-wrapper">
-                        <input type="text" id="info-address" placeholder="Enter token address (0:...) or token name" required>
+                        <input type="text" id="info-address" placeholder="Search by token name, symbol, or address..." autocomplete="off">
                         <button type="submit" class="btn btn-primary" id="info-btn">
                             <span class="btn-text">Search</span>
-                            <span class="btn-loading">
-                                <span class="spinner"></span>
-                            </span>
                         </button>
                     </div>
-                    <span class="hint">Search by contract address or browse tokens on <a href="https://testnet.tychoprotocol.com/tokens" target="_blank">Tycho Explorer</a></span>
                 </form>
 
-                <div id="info-result" class="info-result-card" style="display: none;"></div>
+                <div id="info-result" class="info-result-card"></div>
             </div>
         </section>
 
