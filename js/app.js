@@ -821,23 +821,44 @@ async function handleDeploy(e) {
     }
 }
 
-// ============== Token Info (via Provider) ==============
+// ============== Token Info ==============
+
+function isValidAddress(input) {
+    // Tycho/Everscale addresses start with 0: followed by 64 hex characters
+    return /^0:[a-fA-F0-9]{64}$/.test(input);
+}
 
 async function handleGetInfo(e) {
     e.preventDefault();
 
     const btn = document.getElementById('info-btn');
     const resultDiv = document.getElementById('info-result');
-    const address = document.getElementById('info-address').value.trim();
+    const input = document.getElementById('info-address').value.trim();
 
-    if (!address) {
-        showNotification('Please enter a token address', 'warning');
+    if (!input) {
+        showNotification('Please enter a token address or name', 'warning');
         return;
     }
 
     setButtonLoading(btn, true);
     resultDiv.style.display = 'none';
 
+    // Check if input is an address or a name
+    if (isValidAddress(input)) {
+        // Search by address using provider
+        await searchByAddress(input, resultDiv, btn);
+    } else {
+        // Search by name - redirect to explorer or show message
+        showInfoResult(resultDiv, {
+            isNameSearch: true,
+            searchTerm: input,
+            explorer_url: `${EXPLORER_URL}/tokens`
+        }, true);
+        setButtonLoading(btn, false);
+    }
+}
+
+async function searchByAddress(address, resultDiv, btn) {
     try {
         if (!provider) {
             throw new Error('Wallet not connected. Connect wallet to query token info.');
@@ -911,7 +932,7 @@ async function handleGetInfo(e) {
         showInfoResult(resultDiv, data, true);
 
     } catch (error) {
-        showInfoResult(resultDiv, { error: error.message || 'Failed to get token info' }, false);
+        showInfoResult(resultDiv, { error: error.message || 'Failed to get token info. Make sure the address is a valid TIP-3 token contract.' }, false);
     } finally {
         setButtonLoading(btn, false);
     }
@@ -1218,45 +1239,71 @@ function showInfoResult(div, data, success) {
     div.className = `info-result-card ${success ? '' : 'error'}`;
 
     if (success) {
-        div.innerHTML = `
-            <div class="token-header" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
-                <div class="token-avatar">
-                    <span>${data.name.charAt(0).toUpperCase()}</span>
+        // Check if this is a name search (no direct results)
+        if (data.isNameSearch) {
+            div.innerHTML = `
+                <div class="name-search-result">
+                    <h3>Search by Name</h3>
+                    <p style="color: var(--text-secondary); margin: 1rem 0;">
+                        To search for token "<strong>${data.searchTerm}</strong>" by name, please use the Tycho Explorer.
+                    </p>
+                    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                        If you have the token contract address (starting with 0:...), enter it above for detailed information.
+                    </p>
+                    <a href="${data.explorer_url}" target="_blank" class="btn btn-primary">
+                        Browse Tokens on Explorer
+                    </a>
                 </div>
-                <div class="token-identity">
-                    <h3 class="token-name">${data.name}</h3>
-                    <span class="token-symbol">${data.symbol}</span>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="token-header" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                    <div class="token-avatar">
+                        <span>${data.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div class="token-identity">
+                        <h3 class="token-name">${data.name}</h3>
+                        <span class="token-symbol">${data.symbol}</span>
+                    </div>
                 </div>
-            </div>
-            <div class="result-details">
-                <div class="result-row">
-                    <span class="result-label">Address</span>
-                    <span class="result-value">${truncateAddress(data.address)}</span>
+                <div class="result-details">
+                    <div class="result-row">
+                        <span class="result-label">Address</span>
+                        <span class="result-value address-copy" title="Click to copy" onclick="copyToClipboard('${data.address}')">${truncateAddress(data.address)}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Total Supply</span>
+                        <span class="result-value">${formatSupply(data.total_supply, data.decimals)} ${data.symbol}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Decimals</span>
+                        <span class="result-value">${data.decimals}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Root Owner</span>
+                        <span class="result-value">${truncateAddress(data.root_owner)}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Explorer</span>
+                        <span class="result-value"><a href="${data.explorer_url}" target="_blank">View on Tycho Explorer</a></span>
+                    </div>
                 </div>
-                <div class="result-row">
-                    <span class="result-label">Total Supply</span>
-                    <span class="result-value">${formatSupply(data.total_supply, data.decimals)} ${data.symbol}</span>
-                </div>
-                <div class="result-row">
-                    <span class="result-label">Decimals</span>
-                    <span class="result-value">${data.decimals}</span>
-                </div>
-                <div class="result-row">
-                    <span class="result-label">Root Owner</span>
-                    <span class="result-value">${truncateAddress(data.root_owner)}</span>
-                </div>
-                <div class="result-row">
-                    <span class="result-label">Explorer</span>
-                    <span class="result-value"><a href="${data.explorer_url}" target="_blank">View on Explorer</a></span>
-                </div>
-            </div>
-        `;
+            `;
+        }
     } else {
         div.innerHTML = `
-            <h3 style="color: var(--error);">Error</h3>
+            <h3 style="color: var(--error);">Token Not Found</h3>
             <p style="color: var(--text-muted); margin-top: 0.5rem;">${data.error}</p>
+            <p style="color: var(--text-muted); margin-top: 1rem;">
+                <a href="${EXPLORER_URL}/tokens" target="_blank">Browse all tokens on Tycho Explorer</a>
+            </p>
         `;
     }
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text);
+    showNotification('Address copied to clipboard', 'success');
 }
 
 function showMintResult(div, data, success) {
