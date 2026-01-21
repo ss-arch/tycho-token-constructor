@@ -8,8 +8,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Everscale Inpage Provider for Sparx Wallet -->
-    <script src="https://unpkg.com/everscale-inpage-provider@0.6.2/dist/index.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -135,8 +133,8 @@
 
                             <div class="form-group">
                                 <label for="initial-supply-to">Supply Recipient <span class="optional">(optional)</span></label>
-                                <input type="text" id="initial-supply-to" placeholder="0:... (defaults to deployer wallet)">
-                                <span class="hint">Leave empty to receive tokens in the server wallet</span>
+                                <input type="text" id="initial-supply-to" placeholder="0:... (defaults to your wallet)">
+                                <span class="hint">Leave empty to receive tokens in your connected wallet</span>
                             </div>
                         </div>
 
@@ -203,7 +201,7 @@
                                     Deploying...
                                 </span>
                             </button>
-                            <p class="deploy-hint">Estimated fee: ~0.5 TYCHO (paid from your wallet)</p>
+                            <p class="deploy-hint">Estimated cost: ~3 TYCHO (deployment + gas)</p>
                         </div>
                     </form>
 
@@ -397,12 +395,11 @@
         <div class="footer-content">
             <div class="footer-left">
                 <span class="footer-brand">◆ Tycho Token Constructor</span>
-                <span class="footer-version">v1.0.0</span>
+                <span class="footer-version">v2.0.0 - Pure Web3</span>
             </div>
             <div class="footer-links">
-                <a href="/docs" target="_blank">API Docs</a>
-                <a href="/redoc" target="_blank">ReDoc</a>
-                <a href="https://github.com/ss-arch/tycho-token-constructor" target="_blank">GitHub</a>
+                <a href="https://testnet.tychoprotocol.com" target="_blank">Tycho Explorer</a>
+                <a href="https://github.com/broxus/tip3" target="_blank">TIP-3 Standard</a>
             </div>
         </div>
     </footer>
