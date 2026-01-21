@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initForms();
     initLivePreview();
-    initDecimalButtons();
+    initDecimalInput();
     initSupplyPresets();
     initWalletConnection();
 });
@@ -1096,28 +1096,12 @@ function updateFeaturePreview() {
     if (checkMintable) checkMintable.style.opacity = mintable ? '1' : '0.4';
 }
 
-function initDecimalButtons() {
-    const buttons = document.querySelectorAll('.decimal-btn');
+function initDecimalInput() {
     const input = document.getElementById('token-decimals');
-
-    buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            buttons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            input.value = btn.dataset.value;
-            document.getElementById('preview-decimals').textContent = btn.dataset.value;
-            validateDecimals(btn.dataset.value);
-            updateRawSupply();
-        });
-    });
 
     input.addEventListener('input', () => {
         // Allow only numbers
         input.value = input.value.replace(/[^0-9]/g, '');
-
-        buttons.forEach(b => b.classList.remove('active'));
-        const matchingBtn = Array.from(buttons).find(b => b.dataset.value === input.value);
-        if (matchingBtn) matchingBtn.classList.add('active');
 
         validateDecimals(input.value);
         document.getElementById('preview-decimals').textContent = input.value || '0';
@@ -1176,9 +1160,6 @@ function resetForm() {
     document.getElementById('avatar-letter').textContent = 'T';
     document.getElementById('name-count').textContent = '0';
     document.getElementById('symbol-count').textContent = '0';
-
-    document.querySelectorAll('.decimal-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.decimal-btn[data-value="3"]').classList.add('active');
 
     // Reset decimals validation state
     document.getElementById('decimals-error').style.display = 'none';
