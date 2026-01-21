@@ -265,11 +265,9 @@ async function hasWalletProvider() {
 
 async function getWalletProvider() {
     if (window.__sparx) {
-        console.log('Using Sparx wallet provider');
         return window.__sparx;
     }
     if (window.__ever) {
-        console.log('Using EVER Wallet provider');
         return window.__ever;
     }
 
@@ -281,7 +279,6 @@ async function getWalletProvider() {
         const sparxHandler = () => {
             if (window.__sparx) {
                 clearTimeout(timeout);
-                console.log('Sparx wallet initialized');
                 resolve(window.__sparx);
             }
         };
@@ -289,7 +286,6 @@ async function getWalletProvider() {
         const everHandler = () => {
             if (window.__ever) {
                 clearTimeout(timeout);
-                console.log('EVER Wallet initialized');
                 resolve(window.__ever);
             }
         };
@@ -317,12 +313,10 @@ async function initWalletConnection() {
     disconnectBtn.addEventListener('click', disconnectWallet);
 
     const walletType = await hasWalletProvider();
-    console.log('Detected wallet type:', walletType);
 
     if (walletType) {
         try {
             provider = await getWalletProvider();
-            console.log('Provider obtained:', provider);
 
             let providerState;
             if (typeof provider.getProviderState === 'function') {
@@ -330,8 +324,6 @@ async function initWalletConnection() {
             } else if (typeof provider.request === 'function') {
                 providerState = await provider.request({ method: 'getProviderState' });
             }
-
-            console.log('Provider state:', providerState);
 
             if (providerState?.permissions?.accountInteraction) {
                 selectedAddress = providerState.permissions.accountInteraction.address;
@@ -347,14 +339,12 @@ async function initWalletConnection() {
                     subscription.on('data', handlePermissionChange);
                 }
             } catch (subErr) {
-                console.log('Could not subscribe to permission changes:', subErr.message);
+                // Subscription not supported
             }
 
         } catch (e) {
-            console.log('No existing wallet connection:', e.message);
+            // No existing wallet connection
         }
-    } else {
-        console.log('No wallet extension detected');
     }
 }
 
@@ -402,8 +392,6 @@ async function connectWallet() {
             throw new Error('Provider does not have requestPermissions or request method');
         }
 
-        console.log('Permission result:', result);
-
         if (result?.accountInteraction) {
             selectedAddress = result.accountInteraction.address;
             selectedPublicKey = result.accountInteraction.publicKey;
@@ -415,7 +403,6 @@ async function connectWallet() {
             throw new Error('Wallet did not return account interaction permission');
         }
     } catch (error) {
-        console.error('Failed to connect wallet:', error);
         if (error.code === 4001 || error.message?.includes('denied') || error.message?.includes('reject') || error.message?.includes('cancelled')) {
             showNotification('Connection cancelled by user', 'warning');
         } else {
@@ -437,7 +424,7 @@ async function disconnectWallet() {
         updateWalletUI();
         showNotification('Wallet disconnected', 'success');
     } catch (error) {
-        console.error('Failed to disconnect:', error);
+        // Disconnect failed silently
     }
 }
 
@@ -504,7 +491,7 @@ async function refreshWalletBalance() {
                 balance = state.state.balance;
             }
         } catch (e) {
-            console.log('getFullContractState failed:', e.message);
+            // Balance fetch failed
         }
 
         if (balance) {
@@ -514,7 +501,6 @@ async function refreshWalletBalance() {
             document.getElementById('header-balance').textContent = 'Connected';
         }
     } catch (error) {
-        console.error('Failed to get balance:', error);
         document.getElementById('header-balance').textContent = 'Connected';
     }
 }
@@ -574,21 +560,23 @@ async function handleDeploy(e) {
     const initialSupplyTo = document.getElementById('initial-supply-to').value.trim() || addrStr;
 
     try {
-        console.log('Starting TIP-3 token deployment...');
-        console.log('Wallet address:', addrStr);
-        console.log('Public key:', selectedPublicKey);
-        console.log('Token params:', { name, symbol, decimals, rawSupply: rawSupply.toString() });
-
         showNotification('Preparing token deployment...', 'warning');
 
         // Generate a random nonce for unique contract address
         const randomNonce = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
             .map(b => b.toString(16).padStart(2, '0')).join('');
 
-        console.log('Random nonce:', randomNonce);
-
-        // Step 1: Get expected address using provider
-        console.log('Step 1: Computing expected contract address...');
+        // Extract wallet code from TVC (needed for walletCode_ cell field)
+        let walletCode;
+        try {
+            const walletSplitResult = await provider.request({
+                method: 'splitTvc',
+                params: { tvc: TokenWalletTvc }
+            });
+            walletCode = walletSplitResult?.code;
+        } catch (splitErr) {
+            walletCode = TokenWalletTvc;
+        }
 
         const deployParams = {
             tvc: TokenRootTvc,
@@ -599,18 +587,21 @@ async function handleDeploy(e) {
                 symbol_: symbol,
                 decimals_: decimals,
                 rootOwner_: addrStr,
-                walletCode_: TokenWalletTvc,
+                walletCode_: walletCode,  // Use extracted code, not full TVC
                 randomNonce_: randomNonce,
                 deployer_: ZERO_ADDRESS
             }
         };
 
+        // Get expected address using provider
         let expectedAddress;
+        let expectedStateInit = null;
         try {
+            let result;
             if (typeof provider.getExpectedAddress === 'function') {
-                expectedAddress = await provider.getExpectedAddress(TokenRootAbi, deployParams);
+                result = await provider.getExpectedAddress(TokenRootAbi, deployParams);
             } else {
-                expectedAddress = await provider.request({
+                result = await provider.request({
                     method: 'getExpectedAddress',
                     params: {
                         abi: JSON.stringify(TokenRootAbi),
@@ -618,42 +609,20 @@ async function handleDeploy(e) {
                     }
                 });
             }
+
+            // Check if result includes stateInit
+            if (typeof result === 'object') {
+                expectedAddress = result.address || result;
+                expectedStateInit = result.stateInit || null;
+            } else {
+                expectedAddress = result;
+            }
         } catch (addrErr) {
-            console.error('getExpectedAddress failed:', addrErr);
             throw new Error('Failed to compute contract address: ' + addrErr.message);
         }
 
         const contractAddress = typeof expectedAddress === 'string' ? expectedAddress :
                                (expectedAddress?.address || expectedAddress?.toString());
-        console.log('Expected contract address:', contractAddress);
-
-        // Step 2: Get state init
-        console.log('Step 2: Getting state init...');
-
-        let stateInitResult;
-        try {
-            if (typeof provider.getStateInit === 'function') {
-                stateInitResult = await provider.getStateInit(TokenRootAbi, deployParams);
-            } else {
-                stateInitResult = await provider.request({
-                    method: 'getStateInit',
-                    params: {
-                        abi: JSON.stringify(TokenRootAbi),
-                        ...deployParams
-                    }
-                });
-            }
-        } catch (stateErr) {
-            console.error('getStateInit failed:', stateErr);
-            throw new Error('Failed to get state init: ' + stateErr.message);
-        }
-
-        const stateInit = stateInitResult?.stateInit || stateInitResult;
-        console.log('State init obtained, length:', stateInit?.length);
-
-        // Step 3: Send funds to the contract address with stateInit
-        console.log('Step 3: Deploying contract...');
-        showNotification('Please approve the transaction in your wallet...', 'warning');
 
         // Constructor parameters
         const constructorParams = {
@@ -666,26 +635,134 @@ async function handleDeploy(e) {
             remainingGasTo: addrStr
         };
 
-        console.log('Constructor params:', constructorParams);
+        // Get stateInit with properly encoded init data
+        let stateInit;
 
-        // Deploy using sendMessage with stateInit
-        const deployResult = await provider.request({
-            method: 'sendMessage',
-            params: {
-                sender: addrStr,
-                recipient: contractAddress,
-                amount: '3000000000', // 3 TYCHO for deployment + gas
-                bounce: false,        // MUST be false for deployment
-                stateInit: stateInit,
-                payload: {
-                    abi: JSON.stringify(TokenRootAbi),
-                    method: 'constructor',
-                    params: constructorParams
+        // Use stateInit from getExpectedAddress if available
+        if (expectedStateInit) {
+            stateInit = expectedStateInit;
+        }
+
+        // Try getStateInit (Broxus standard)
+        if (!stateInit) {
+            try {
+                let stateInitResult;
+                if (typeof provider.getStateInit === 'function') {
+                    stateInitResult = await provider.getStateInit(TokenRootAbi, deployParams);
+                } else {
+                    stateInitResult = await provider.request({
+                        method: 'getStateInit',
+                        params: {
+                            abi: JSON.stringify(TokenRootAbi),
+                            ...deployParams
+                        }
+                    });
                 }
+                stateInit = stateInitResult?.stateInit || stateInitResult;
+            } catch (err1) {
+                // Will fall through to packIntoCell method below
             }
-        });
+        }
 
-        console.log('Deployment transaction result:', deployResult);
+        // Build stateInit using packIntoCell if getStateInit failed
+        if (!stateInit) {
+            try {
+                // Split TokenRoot TVC to get code
+                const splitResult = await provider.request({
+                    method: 'splitTvc',
+                    params: { tvc: TokenRootTvc }
+                });
+                const code = splitResult?.code;
+
+                if (!code) {
+                    throw new Error('Failed to extract code from TVC');
+                }
+
+                if (!walletCode) {
+                    throw new Error('Wallet code not available');
+                }
+
+                // Pack init data
+                const packedData = await provider.request({
+                    method: 'packIntoCell',
+                    params: {
+                        abiVersion: '2.2',
+                        structure: [
+                            { name: '_pubkey', type: 'uint256' },
+                            { name: '_timestamp', type: 'uint64' },
+                            { name: '_constructorFlag', type: 'bool' },
+                            ...TokenRootAbi.data.map(d => ({ name: d.name, type: d.type }))
+                        ],
+                        data: {
+                            _pubkey: '0x' + selectedPublicKey,
+                            _timestamp: '0',
+                            _constructorFlag: false,
+                            name_: name,
+                            symbol_: symbol,
+                            decimals_: decimals,
+                            rootOwner_: addrStr,
+                            walletCode_: walletCode,
+                            randomNonce_: randomNonce,
+                            deployer_: ZERO_ADDRESS
+                        }
+                    }
+                });
+
+                const mergeResult = await provider.request({
+                    method: 'mergeTvc',
+                    params: {
+                        code: code,
+                        data: packedData?.boc || packedData
+                    }
+                });
+                stateInit = mergeResult?.tvc || mergeResult;
+
+            } catch (err2) {
+                // Fallback to raw TVC
+                stateInit = TokenRootTvc;
+            }
+        }
+
+        // Deploy contract (two-step: fund with stateInit, then call constructor)
+        let deployResult;
+
+        showNotification('Please approve the deployment transaction...', 'warning');
+
+        try {
+            // Send funds with stateInit to deploy the contract
+            await provider.request({
+                method: 'sendMessage',
+                params: {
+                    sender: addrStr,
+                    recipient: contractAddress,
+                    amount: '3000000000', // 3 TYCHO
+                    bounce: false,
+                    stateInit: stateInit
+                }
+            });
+
+            // Wait for the contract to be deployed
+            showNotification('Contract deployed, calling constructor...', 'warning');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // Call constructor via external message
+            deployResult = await provider.request({
+                method: 'sendExternalMessage',
+                params: {
+                    publicKey: selectedPublicKey,
+                    recipient: contractAddress,
+                    stateInit: stateInit,
+                    payload: {
+                        abi: JSON.stringify(TokenRootAbi),
+                        method: 'constructor',
+                        params: constructorParams
+                    }
+                }
+            });
+
+        } catch (deployErr) {
+            throw new Error('Failed to deploy: ' + deployErr.message);
+        }
 
         // Extract transaction ID
         let txId;
@@ -702,8 +779,6 @@ async function handleDeploy(e) {
         } else {
             txId = 'pending';
         }
-
-        console.log('Transaction ID:', txId);
 
         const data = {
             success: true,
@@ -724,8 +799,6 @@ async function handleDeploy(e) {
         showNotification('Token deployed successfully!', 'success');
 
     } catch (error) {
-        console.error('Deploy error:', error);
-
         if (error.code === 4001 || error.message?.includes('reject') || error.message?.includes('cancel') || error.message?.includes('denied')) {
             showNotification('Transaction cancelled by user', 'warning');
             setButtonLoading(btn, false);
@@ -828,7 +901,6 @@ async function handleGetInfo(e) {
         showInfoResult(resultDiv, data, true);
 
     } catch (error) {
-        console.error('Get info error:', error);
         showInfoResult(resultDiv, { error: error.message || 'Failed to get token info' }, false);
     } finally {
         setButtonLoading(btn, false);
@@ -859,8 +931,6 @@ async function handleMint(e) {
     const addrStr = typeof selectedAddress === 'string' ? selectedAddress : selectedAddress.toString();
 
     try {
-        console.log('Minting tokens...');
-
         // Call mint function on token root
         const mintParams = {
             amount: amount,
@@ -888,8 +958,6 @@ async function handleMint(e) {
             }
         });
 
-        console.log('Mint result:', result);
-
         let txId = result?.transaction?.id?.hash || result?.hash || 'pending';
 
         showMintResult(resultDiv, {
@@ -901,8 +969,6 @@ async function handleMint(e) {
         showNotification('Tokens minted successfully!', 'success');
 
     } catch (error) {
-        console.error('Mint error:', error);
-
         if (error.code === 4001 || error.message?.includes('reject') || error.message?.includes('cancel')) {
             showNotification('Transaction cancelled by user', 'warning');
             setButtonLoading(btn, false);
@@ -949,7 +1015,10 @@ function initTabs() {
 }
 
 function initForms() {
-    document.getElementById('deploy-form').addEventListener('submit', handleDeploy);
+    const deployForm = document.getElementById('deploy-form');
+    if (deployForm) {
+        deployForm.addEventListener('submit', handleDeploy);
+    }
     document.getElementById('info-form').addEventListener('submit', handleGetInfo);
     document.getElementById('mint-form').addEventListener('submit', handleMint);
 }
