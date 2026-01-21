@@ -223,6 +223,17 @@ const ZERO_ADDRESS = "0:00000000000000000000000000000000000000000000000000000000
 // Explorer URL
 const EXPLORER_URL = "https://testnet.tychoprotocol.com";
 
+// Token API URL (proxy server) - set your deployed proxy URL here
+const TOKEN_API_URL = (() => {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+        return 'http://localhost:3001';
+    }
+    // For GitHub Pages or other production deployments, use your proxy URL
+    // You can deploy the proxy to Render, Railway, Vercel, etc.
+    return 'https://tycho-token-proxy.onrender.com';
+})();
+
 // Token database refresh interval (5 minutes)
 const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000;
 
@@ -852,32 +863,57 @@ async function loadTokenDatabase() {
 
     isLoadingTokens = true;
     const statusEl = document.getElementById('token-db-status');
+    const resultDiv = document.getElementById('info-result');
 
     try {
-        if (statusEl) statusEl.textContent = 'Loading tokens...';
+        if (statusEl) statusEl.textContent = 'Loading tokens from Tycho network...';
+        if (resultDiv) {
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading tokens from Tycho network...</p>
+                </div>
+            `;
+        }
 
-        // Try to fetch from Tycho Explorer API
-        // Using a CORS proxy or direct fetch
-        const response = await fetch(`${EXPLORER_URL}/api/v1/tokens?limit=1000`);
+        // Fetch from our proxy server
+        const response = await fetch(`${TOKEN_API_URL}/api/tokens`);
 
         if (response.ok) {
             const data = await response.json();
-            tokenDatabase = data.tokens || data || [];
-        } else {
-            // Fallback: try alternative endpoint
-            const altResponse = await fetch(`${EXPLORER_URL}/tokens.json`);
-            if (altResponse.ok) {
-                tokenDatabase = await altResponse.json();
+            if (data.success && data.tokens) {
+                tokenDatabase = data.tokens;
             }
         }
     } catch (error) {
-        // If API fails, use locally deployed tokens + any cached data
-        console.log('Could not fetch from explorer, using local data');
+        // If proxy fails, show error but continue with local data
+        if (resultDiv) {
+            resultDiv.innerHTML = `
+                <div class="loading-error">
+                    <p>Could not connect to token database.</p>
+                    <p>Tokens you deploy will appear here.</p>
+                    <button class="btn btn-secondary" onclick="loadTokenDatabase()">Retry</button>
+                </div>
+            `;
+        }
     }
 
-    // Add recently deployed tokens from this session
+    // Add recently deployed tokens from this session (at the beginning)
     recentDeployments.forEach(token => {
-        if (!tokenDatabase.find(t => t.address === token.address)) {
+        const existingIdx = tokenDatabase.findIndex(t => t.address === token.address);
+        if (existingIdx >= 0) {
+            // Update existing token
+            tokenDatabase[existingIdx] = {
+                ...tokenDatabase[existingIdx],
+                name: token.name,
+                symbol: token.symbol,
+                decimals: token.decimals,
+                totalSupply: token.initial_supply,
+                owner: token.owner
+            };
+        } else {
+            // Add new token at the beginning
             tokenDatabase.unshift({
                 address: token.address,
                 name: token.name,
