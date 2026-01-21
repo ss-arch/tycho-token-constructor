@@ -100,11 +100,11 @@
                             <div class="form-group">
                                 <label for="token-decimals">Decimals</label>
                                 <div class="decimals-buttons">
-                                    <button type="button" class="decimal-btn" data-value="3">3</button>
-                                    <button type="button" class="decimal-btn active" data-value="9">9</button>
-                                    <input type="number" id="token-decimals" class="decimal-input" value="9" min="3" max="99">
+                                    <button type="button" class="decimal-btn active" data-value="3">3</button>
+                                    <button type="button" class="decimal-btn" data-value="9">9</button>
+                                    <input type="number" id="token-decimals" class="decimal-input" value="3" min="3" max="99">
                                 </div>
-                                <span class="hint" id="decimals-hint">Number of decimal places (3-99). 9 is standard for TVM chains.</span>
+                                <span class="hint" id="decimals-hint">Number of decimal places (3-99). 3 is recommended.</span>
                                 <span class="hint error-hint" id="decimals-error" style="display: none; color: var(--error);">Please enter a number between 3 and 99</span>
                             </div>
                         </div>
@@ -126,7 +126,7 @@
                                     <button type="button" class="preset-btn" data-value="1000000000">1B</button>
                                 </div>
                                 <div class="supply-conversion">
-                                    Raw value: <code id="raw-supply-display">1,000,000,000,000,000</code>
+                                    Raw value: <code id="raw-supply-display">1,000,000,000</code>
                                 </div>
                             </div>
 
@@ -234,7 +234,7 @@
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Decimals</span>
-                                    <span class="detail-value" id="preview-decimals">9</span>
+                                    <span class="detail-value" id="preview-decimals">3</span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Network</span>

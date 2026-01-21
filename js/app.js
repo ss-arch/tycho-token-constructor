@@ -1166,19 +1166,19 @@ function initSupplyPresets() {
 
 function resetForm() {
     document.getElementById('deploy-form').reset();
-    document.getElementById('token-decimals').value = 9;
+    document.getElementById('token-decimals').value = 3;
     document.getElementById('initial-supply').value = '1000000';
 
     document.getElementById('preview-name').textContent = 'Token Name';
     document.getElementById('preview-symbol').textContent = 'SYMBOL';
     document.getElementById('preview-supply').textContent = '1,000,000';
-    document.getElementById('preview-decimals').textContent = '9';
+    document.getElementById('preview-decimals').textContent = '3';
     document.getElementById('avatar-letter').textContent = 'T';
     document.getElementById('name-count').textContent = '0';
     document.getElementById('symbol-count').textContent = '0';
 
     document.querySelectorAll('.decimal-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.decimal-btn[data-value="9"]').classList.add('active');
+    document.querySelector('.decimal-btn[data-value="3"]').classList.add('active');
 
     // Reset decimals validation state
     document.getElementById('decimals-error').style.display = 'none';
