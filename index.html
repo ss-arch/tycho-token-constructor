@@ -100,13 +100,12 @@
                             <div class="form-group">
                                 <label for="token-decimals">Decimals</label>
                                 <div class="decimals-buttons">
-                                    <button type="button" class="decimal-btn" data-value="0">0</button>
-                                    <button type="button" class="decimal-btn" data-value="6">6</button>
+                                    <button type="button" class="decimal-btn" data-value="3">3</button>
                                     <button type="button" class="decimal-btn active" data-value="9">9</button>
-                                    <button type="button" class="decimal-btn" data-value="18">18</button>
-                                    <input type="number" id="token-decimals" class="decimal-input" value="9" min="0" max="18">
+                                    <input type="number" id="token-decimals" class="decimal-input" value="9" min="3" max="99">
                                 </div>
-                                <span class="hint">Number of decimal places. 9 is standard for TVM chains.</span>
+                                <span class="hint" id="decimals-hint">Number of decimal places (3-99). 9 is standard for TVM chains.</span>
+                                <span class="hint error-hint" id="decimals-error" style="display: none; color: var(--error);">Please enter a number between 3 and 99</span>
                             </div>
                         </div>
 

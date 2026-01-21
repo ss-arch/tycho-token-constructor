@@ -548,6 +548,16 @@ body {
     text-align: center;
 }
 
+.decimal-input.input-error {
+    border-color: var(--error) !important;
+    background: var(--error-light) !important;
+}
+
+.error-hint {
+    color: var(--error);
+    font-weight: 500;
+}
+
 /* Supply */
 .supply-wrapper {
     display: flex;

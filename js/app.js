@@ -549,7 +549,17 @@ async function handleDeploy(e) {
 
     const name = document.getElementById('token-name').value;
     const symbol = document.getElementById('token-symbol').value.toUpperCase();
-    const decimals = parseInt(document.getElementById('token-decimals').value) || 9;
+    const decimalsValue = document.getElementById('token-decimals').value;
+    const decimals = parseInt(decimalsValue) || 9;
+
+    // Validate decimals
+    if (isNaN(decimals) || decimals < 3 || decimals > 99) {
+        showNotification('Decimals must be a number between 3 and 99', 'error');
+        validateDecimals(decimalsValue);
+        setButtonLoading(btn, false);
+        return;
+    }
+
     const supplyRaw = document.getElementById('initial-supply').value.replace(/,/g, '') || '0';
     const rawSupply = BigInt(supplyRaw) * BigInt(10 ** decimals);
     const mintDisabled = !document.getElementById('mintable').checked;
@@ -1096,15 +1106,49 @@ function initDecimalButtons() {
             btn.classList.add('active');
             input.value = btn.dataset.value;
             document.getElementById('preview-decimals').textContent = btn.dataset.value;
+            validateDecimals(btn.dataset.value);
             updateRawSupply();
         });
     });
 
     input.addEventListener('input', () => {
+        // Allow only numbers
+        input.value = input.value.replace(/[^0-9]/g, '');
+
         buttons.forEach(b => b.classList.remove('active'));
         const matchingBtn = Array.from(buttons).find(b => b.dataset.value === input.value);
         if (matchingBtn) matchingBtn.classList.add('active');
+
+        validateDecimals(input.value);
+        document.getElementById('preview-decimals').textContent = input.value || '0';
+        updateRawSupply();
     });
+}
+
+function validateDecimals(value) {
+    const num = parseInt(value);
+    const errorHint = document.getElementById('decimals-error');
+    const normalHint = document.getElementById('decimals-hint');
+    const input = document.getElementById('token-decimals');
+    const deployBtn = document.getElementById('deploy-btn');
+
+    const isValid = !isNaN(num) && num >= 3 && num <= 99;
+
+    if (isValid) {
+        errorHint.style.display = 'none';
+        normalHint.style.display = 'block';
+        input.classList.remove('input-error');
+        if (isWalletConnected) {
+            deployBtn.disabled = false;
+        }
+    } else {
+        errorHint.style.display = 'block';
+        normalHint.style.display = 'none';
+        input.classList.add('input-error');
+        deployBtn.disabled = true;
+    }
+
+    return isValid;
 }
 
 function initSupplyPresets() {
@@ -1135,6 +1179,11 @@ function resetForm() {
 
     document.querySelectorAll('.decimal-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('.decimal-btn[data-value="9"]').classList.add('active');
+
+    // Reset decimals validation state
+    document.getElementById('decimals-error').style.display = 'none';
+    document.getElementById('decimals-hint').style.display = 'block';
+    document.getElementById('token-decimals').classList.remove('input-error');
 
     document.getElementById('mintable').checked = true;
     document.getElementById('burnable').checked = true;
